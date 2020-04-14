@@ -1,0 +1,299 @@
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+C0 + cwrap_log_verbosity_set() { #1
+C0   - verbosity=1
+C0   - [cwrap_log_verbosity_set() ignores verbosity!]
+C0   - verbosity 1 set for 24 matches in 24 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
+C0   } // cwrap_log_verbosity_set() 
+C0 + _GLOBAL__sub_I_cpp_example_1_a_cpp() { #1
+C0   + __static_initialization_and_destruction_0() { #1
+C0     + my_struct::my_struct() { #1
+C0       - arg1=my_struct_1
+C0       - constructing my_struct
+C0       } // my_struct::my_struct() 
+C0     } // __static_initialization_and_destruction_0() 
+C0   } // _GLOBAL__sub_I_cpp_example_1_a_cpp() 
+C0 + _GLOBAL__sub_I_cpp_example_1_b_cpp() { #1
+C0   + __static_initialization_and_destruction_0() { #2
+C0     + my_struct::my_struct() { #2
+C0       - arg1=my_struct_2
+C0       - constructing my_struct
+C0       } // my_struct::my_struct() 
+C0     } // __static_initialization_and_destruction_0() 
+C0   } // _GLOBAL__sub_I_cpp_example_1_b_cpp() 
+C0 + main() { #1
+C0   + qux() { #1
+C0     + quux() { #1
+C0       - return r=2
+C0       } // quux() 
+C0     + quux() { #2
+C0       - return r=3
+C0       } // quux() 
+C0     + quux() { #3
+C0       - return r=4
+C0       } // quux() 
+C0     } // qux() 
+C0   + bar() { #1
+C0     - a=0
+C0     + baz() { #1
+C0       - a=1
+C0       - return r=2
+C0       } // baz() 
+C0     - return r=2
+C0     } // bar() 
+C0   + cwrap_log_verbosity_set() { #2
+C0     - verbosity=2=function~bar
+C0     - [cwrap_log_verbosity_set() ignores verbosity!]
+C0     - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0     } // cwrap_log_verbosity_set() 
+C0   + baz() { #2
+C0     - a=2
+C0     - return r=3
+C0     } // baz() 
+C0   + baz() { #3
+C0     - a=3
+C0     - return r=4
+C0     } // baz() 
+C0   - hello world
+C0   + baz() { #4
+C0     - a=1
+C0     - return r=2
+C0     } // baz() 
+C0   + int get_max<>() { #1
+C0     - a=12345, b=67890
+C0     - return r=67890
+C0     } // int get_max<>() 
+C0   + char get_max<>() { #1
+C0     - a=43, b=21
+C0     - return r=43
+C0     } // char get_max<>() 
+C0   + my_struct::my_struct() { #3
+C0     - arg1=my_struct_2
+C0     - constructing my_struct
+C0     } // my_struct::my_struct() 
+C0   + Foo::Foo() { #1
+C0     + my_struct::my_struct() { #1
+C0       - arg1=my_struct_3, arg2=a
+C0       - constructing my_struct
+C0       } // my_struct::my_struct() 
+C0     - constructing Foo
+C0     - inside Foo
+C0     } // Foo::Foo() 
+C0   + Foo::Foo() { #2
+C0     + my_struct::my_struct() { #2
+C0       - arg1=my_struct_3, arg2=b
+C0       - constructing my_struct
+C0       } // my_struct::my_struct() 
+C0     - constructing Foo
+C0     - inside Foo
+C0     } // Foo::Foo() 
+C0   + Foo::my_public() { #1
+C0     - a=100
+C0     - hello my_public
+C0     + Foo::my_private() { #1
+C0       - a=101
+C0       + baz() { #5
+C0         - a=103
+C0         - return r=104
+C0         } // baz() 
+C0       - return r=104
+C0       } // Foo::my_private() 
+C0     - return r=104
+C0     } // Foo::my_public() 
+C0   + baz() { #6
+C0     - a=105
+C0     - return r=106
+C0     } // baz() 
+C0   - return b=106
+C0   + Foo::~Foo() { #1
+C0     - deconstructing Foo
+C0     - inside ~Foo
+C0     + my_struct::~my_struct() { #1
+C0       - deconstructing my_struct; f_=my_struct_3
+C0       } // my_struct::~my_struct() 
+C0     } // Foo::~Foo() 
+C0   + Foo::~Foo() { #2
+C0     - deconstructing Foo
+C0     - inside ~Foo
+C0     + my_struct::~my_struct() { #2
+C0       - deconstructing my_struct; f_=my_struct_3
+C0       } // my_struct::~my_struct() 
+C0     } // Foo::~Foo() 
+C0   + my_struct::~my_struct() { #3
+C0     - deconstructing my_struct; f_=my_struct_2
+C0     } // my_struct::~my_struct() 
+C0   + clean_up() { #1
+C0     - my_int=5
+C0     } // clean_up() 
+C0   } // main() 
+C0 + bye_baz() { #1
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye_baz() { #2
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye_baz() { #3
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye() { #1
+C0   - called via atexit() via main()
+C0   } // bye() 
+C0 + bye_baz() { #4
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye_baz() { #5
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye_baz() { #6
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + my_struct::~my_struct() { #4
+C0   - deconstructing my_struct; f_=my_struct_2
+C0   } // my_struct::~my_struct() 
+C0 + my_struct::~my_struct() { #5
+C0   - deconstructing my_struct; f_=my_struct_1
+C0   } // my_struct::~my_struct() 
+C0 + cwrap_log_stats() { #1
+C0   - [cwrap_log_stats() ignores verbosity!]
+C0   - 1 calls to 1 of 1 function variation for cwrap_log_stats()
+C0   - 2 calls to 1 of 1 function variation for cwrap_log_verbosity_set()
+C0   - 1 calls to 1 of 1 function variation for main()
+C0   - 5 calls to 1 of 1 function variation for my_struct::~my_struct()
+C0   - 2 calls to 2 of 2 function variation for my_struct::my_struct()
+C0   - 3 calls to 1 of 2 function variation for my_struct::my_struct()
+C0   - 2 calls to 1 of 1 function variation for Foo::~Foo()
+C0   - 2 calls to 1 of 1 function variation for Foo::Foo()
+C0   - 1 calls to 1 of 1 function variation for Foo::my_public()
+C0   - 1 calls to 1 of 1 function variation for Foo::my_private()
+C0   - 3 calls to 1 of 1 function variation for quux()
+C0   - 1 calls to 1 of 1 function variation for qux()
+C0   - 1 calls to 1 of 1 function variation for bar()
+C0   - 1 calls to 1 of 1 function variation for clean_up()
+C0   - 1 calls to 1 of 1 function variation for int get_max<>()
+C0   - 1 calls to 1 of 1 function variation for char get_max<>()
+C0   - 6 calls to 1 of 1 function variation for bye_baz()
+C0   - 2 calls to 1 of 1 function variation for __static_initialization_and_destruction_0()
+C0   - 1 calls to 1 of 1 function variation for bye()
+C0   - 6 calls to 1 of 1 function variation for baz()
+C0   - 1 calls to 1 of 1 function variation for _GLOBAL__sub_I_cpp_example_1_b_cpp()
+C0   - 1 calls to 1 of 1 function variation for _GLOBAL__sub_I_cpp_example_1_a_cpp()
+C0   - 45 calls to 22 of 24 functions instrumented
+C0   } // cwrap_log_stats() 
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=9:1=FUNCTION~my_ (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+C0 + cwrap_log_verbosity_set() { #1
+C0   - verbosity=9:1=FUNCTION~my_
+C0   - [cwrap_log_verbosity_set() ignores verbosity!]
+C0   - verbosity 9 set for 24 matches in 24 functions for 1 byte clause '9' // type=FILE|FUNCTION keyword=(null)
+C0   - verbosity 1 set for 5 matches in 24 functions for 14 byte clause '1=FUNCTION~my_' // type=FUNCTION keyword=my_
+C0   } // cwrap_log_verbosity_set() 
+C0 + my_struct::my_struct() { #1
+C0   - arg1=my_struct_1
+C0   - constructing my_struct
+C0   } // my_struct::my_struct() 
+C0 + my_struct::my_struct() { #2
+C0   - arg1=my_struct_2
+C0   - constructing my_struct
+C0   } // my_struct::my_struct() 
+C0 + cwrap_log_verbosity_set() { #2
+C0   - verbosity=2=function~bar
+C0   - [cwrap_log_verbosity_set() ignores verbosity!]
+C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0   } // cwrap_log_verbosity_set() 
+C0 + my_struct::my_struct() { #3
+C0   - arg1=my_struct_2
+C0   - constructing my_struct
+C0   } // my_struct::my_struct() 
+C0 + my_struct::my_struct() { #1
+C0   - arg1=my_struct_3, arg2=a
+C0   - constructing my_struct
+C0   } // my_struct::my_struct() 
+C0 + my_struct::my_struct() { #2
+C0   - arg1=my_struct_3, arg2=b
+C0   - constructing my_struct
+C0   } // my_struct::my_struct() 
+C0 + Foo::my_public() { #1
+C0   - a=100
+C0   - hello my_public
+C0   + Foo::my_private() { #1
+C0     - a=101
+C0     - return r=104
+C0     } // Foo::my_private() 
+C0   - return r=104
+C0   } // Foo::my_public() 
+C0 + my_struct::~my_struct() { #1
+C0   - deconstructing my_struct; f_=my_struct_3
+C0   } // my_struct::~my_struct() 
+C0 + my_struct::~my_struct() { #2
+C0   - deconstructing my_struct; f_=my_struct_3
+C0   } // my_struct::~my_struct() 
+C0 + my_struct::~my_struct() { #3
+C0   - deconstructing my_struct; f_=my_struct_2
+C0   } // my_struct::~my_struct() 
+C0 + my_struct::~my_struct() { #4
+C0   - deconstructing my_struct; f_=my_struct_2
+C0   } // my_struct::~my_struct() 
+C0 + my_struct::~my_struct() { #5
+C0   - deconstructing my_struct; f_=my_struct_1
+C0   } // my_struct::~my_struct() 
+C0 + cwrap_log_stats() { #1
+C0   - [cwrap_log_stats() ignores verbosity!]
+C0   - 1 calls to 1 of 1 function variation for cwrap_log_stats()
+C0   - 2 calls to 1 of 1 function variation for cwrap_log_verbosity_set()
+C0   - 5 calls to 1 of 1 function variation for my_struct::~my_struct()
+C0   - 2 calls to 2 of 2 function variation for my_struct::my_struct()
+C0   - 3 calls to 1 of 2 function variation for my_struct::my_struct()
+C0   - 1 calls to 1 of 1 function variation for Foo::my_public()
+C0   - 1 calls to 1 of 1 function variation for Foo::my_private()
+C0   } // cwrap_log_stats() 
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=bye_baz
+C0 + cwrap_log_verbosity_set() { #1
+C0   - verbosity=1
+C0   - [cwrap_log_verbosity_set() ignores verbosity!]
+C0   - verbosity 1 set for 24 matches in 24 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
+C0   } // cwrap_log_verbosity_set() 
+C0 + cwrap_log_quiet_until() { #1
+C0   - name=bye_baz
+C0   - going quiet until function bye_baz()
+C0   -  [cwrap_log_quiet_until() ignores verbosity!]
+C0   } // cwrap_log_quiet_until() 
+C0 + cwrap_log_verbosity_set() { #2
+C0   - verbosity=2=function~bar
+C0   - [cwrap_log_verbosity_set() ignores verbosity!]
+C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0   } // cwrap_log_verbosity_set() 
+C0 + bye_baz() { #1
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye_baz() { #2
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye_baz() { #3
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye() { #1
+C0   - called via atexit() via main()
+C0   } // bye() 
+C0 + bye_baz() { #4
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye_baz() { #5
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + bye_baz() { #6
+C0   - called via atexit() via baz()
+C0   } // bye_baz() 
+C0 + my_struct::~my_struct() { #1
+C0   - deconstructing my_struct; f_=my_struct_2
+C0   } // my_struct::~my_struct() 
+C0 + my_struct::~my_struct() { #2
+C0   - deconstructing my_struct; f_=my_struct_1
+C0   } // my_struct::~my_struct() 
+C0 + cwrap_log_stats() { #1
+C0   - [cwrap_log_stats() ignores verbosity!]
+C0   - 1 calls to 1 of 1 function variation for cwrap_log_stats()
+C0   - 2 calls to 1 of 1 function variation for cwrap_log_verbosity_set()
+C0   - 1 calls to 1 of 1 function variation for cwrap_log_quiet_until()
+C0   - 2 calls to 1 of 1 function variation for my_struct::~my_struct()
+C0   - 6 calls to 1 of 1 function variation for bye_baz()
+C0   - 1 calls to 1 of 1 function variation for bye()
+C0   - 13 calls to 6 of 24 functions instrumented
+C0   } // cwrap_log_stats() 

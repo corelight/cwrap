@@ -1,0 +1,120 @@
+r=2
+r=3
+r=4
+a=0
+a=1
+r=2
+r=2
+a=1
+a=2
+r=3
+r=3
+a=2
+a=3
+r=4
+r=4
+hello world
+a=1
+r=2
+a=100
+hello my_public
+a=101
+a=102
+a=103
+r=104
+r=104
+r=104
+r=104
+a=104
+a=105
+r=106
+r=106
+b=106
+my_int=5
+called via atexit() via baz()
+called via atexit() via baz()
+called via atexit() via baz()
+called via atexit() via main()
+called via atexit() via baz()
+called via atexit() via baz()
+called via atexit() via baz()
+r=2
+r=3
+r=4
+a=0
+a=1
+r=2
+r=2
+a=1
+a=2
+r=3
+r=3
+a=2
+a=3
+r=4
+r=4
+hello world
+a=1
+r=2
+a=100
+hello my_public
+a=101
+a=102
+a=103
+r=104
+r=104
+r=104
+r=104
+a=104
+a=105
+r=106
+r=106
+b=106
+my_int=5
+called via atexit() via baz()
+called via atexit() via baz()
+called via atexit() via baz()
+called via atexit() via main()
+called via atexit() via baz()
+called via atexit() via baz()
+called via atexit() via baz()
+r=2
+r=3
+r=4
+a=0
+a=1
+r=2
+r=2
+a=1
+a=2
+r=3
+r=3
+a=2
+a=3
+r=4
+r=4
+hello world
+a=1
+r=2
+a=100
+hello my_public
+a=101
+a=102
+a=103
+r=104
+r=104
+r=104
+r=104
+a=104
+a=105
+r=106
+r=106
+b=106
+my_int=5
+called via atexit() via baz()
+called via atexit() via baz()
+called via atexit() via baz()
+called via atexit() via main()
+called via atexit() via baz()
+called via atexit() via baz()
+called via atexit() via baz()
