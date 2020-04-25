@@ -1,6 +1,8 @@
 Auto wrap C and C++ functions with instrumentation
 =========================
 
+[![MIT License](https://img.shields.io/github/license/corelight/cwrap.svg)](./LICENSE)
+
 cwrap is an experimental but working software with system tests to auto wrap C and C++ functions with instrumentation for code comprehension, debugging, & light performance analysis. Supports gcc & Intel.
 
 How is cwrap different from the gcc `-finstrument-functions` option?
