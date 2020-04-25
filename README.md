@@ -66,7 +66,7 @@ How to build and test cwrap?
 
 - cwrap is currently one Perl script and does not need 'building' itself.
 - The cwrap Perl script has embedded all the cwrap C source code needed to make everything work.
-- cwrap comes with some tests here: https://github.com/corelight/cwrap/test/README.md
+- cwrap comes with some tests here: https://github.com/corelight/cwrap/tree/master/test
 
 
 What is not implemented yet?
