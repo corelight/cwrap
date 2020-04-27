@@ -1,9 +1,137 @@
+
 Auto wrap C and C++ functions with instrumentation
 =========================
 
 [![MIT License](https://img.shields.io/github/license/corelight/cwrap.svg)](./LICENSE)
 
 cwrap is an experimental but working software with system tests to auto wrap C and C++ functions with instrumentation for code comprehension, debugging, & light performance analysis. Supports gcc & Intel.
+
+cwrap usage by example
+-----------
+Clone cwrap, create example `foo.c`, and compile with and without cwrap:
+```
+$ git clone https://github.com/corelight/cwrap
+$ cat << EOF > foo.c
+#include <stdio.h>
+void baz(void) { }
+void bar(void) { printf("- example function\n"); baz(); }
+int main(int argc, char * argv[]) { bar(); }
+EOF
+$ CC=gcc                  ; $CC -o foo foo.c && ./foo # compile without cwrap
+- example function
+$ CC=`pwd`/cwrap/cwrap.pl ; $CC -o foo foo.c && ./foo # compile with    cwrap; default verbosity off
+- example function
+$ wc --bytes foo*
+37832 foo            <-- the compiled binary
+  141 foo.c          <-- the file created above
+39155 foo.cwrap.c    <-- auto created file & auto linked
+ 5882 foo.cwrap.log  <-- auto created cwrap compilation log
+ 2198 foo.s          <-- auto created assembler file
+ 3950 foo.s.2.s      <-- auto created munged assembler file
+```
+Ask cwrap compiled `foo` which C functions and/or C++ function variations are instrumented:
+```
+$ CWRAP_LOG_SHOW=1 ./foo
+C0 + cwrap_log_show() { #1
+C0   - func_addr=(nil)
+C0   - #1: verbosity 9 for 1 of 1 function variation for cwrap_log_show() from foo.cwrap.c
+C0   - #2: verbosity 9 for 1 of 1 function variation for cwrap_log_stats() from foo.cwrap.c
+C0   - #3: verbosity 9 for 1 of 1 function variation for cwrap_log_verbosity_set() from foo.cwrap.c
+C0   - #4: verbosity 9 for 1 of 1 function variation for cwrap_log_quiet_until() from foo.cwrap.c
+C0   - #5: verbosity 9 for 1 of 1 function variation for main() from ld: foo.c
+C0   - #6: verbosity 9 for 1 of 1 function variation for baz() from ld: foo.c
+C0   - #7: verbosity 9 for 1 of 1 function variation for bar() from ld: foo.c
+C0   } // cwrap_log_show()
+```
+Ask cwrap compiled `foo`  to run with full verbosity with various output line prefixes, and output stats upon exit:
+```
+$ CWRAP_LOG_STATS=1 CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=1 CWRAP_LOG_VERBOSITY_SET=1 ./foo
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+#1 T112855 C0 0.000000s + cwrap_log_verbosity_set(verbosity=1) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
+#2 T112855 C0 0.000015s   - verbosity 1 set for 7 matches in 7 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
+#3 T112855 C0 0.000025s   } // cwrap_log_verbosity_set()
+#4 T112855 C0 0.000030s + main() { // #1
+#5 T112855 C0 0.000032s   + bar() { // #1
+- example function
+#6 T112855 C0 0.000035s     + baz() {} // #1
+#7 T112855 C0 0.000041s     } // bar()
+#8 T112855 C0 0.000044s   } // main()
+#9 T112855 C0 0.000048s + cwrap_log_stats() { // #1 [cwrap_log_stats() ignores verbosity!]
+#10 T112855 C0 0.000050s   - 1 calls to 1 of 1 function variation for cwrap_log_stats()
+#11 T112855 C0 0.000055s   - 1 calls to 1 of 1 function variation for cwrap_log_verbosity_set()
+#12 T112855 C0 0.000058s   - 1 calls to 1 of 1 function variation for main()
+#13 T112855 C0 0.000061s   - 1 calls to 1 of 1 function variation for baz()
+#14 T112855 C0 0.000064s   - 1 calls to 1 of 1 function variation for bar()
+#15 T112855 C0 0.000066s   - 5 calls to 5 of 7 functions instrumented
+#16 T112855 C0 0.000069s   } // cwrap_log_stats()
+```
+Ask cwrap compiled `foo`  to run but ignore verbosity until `bar()` is executed:
+```
+$ CWRAP_LOG_QUIET_UNTIL=bar CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=1 CWRAP_LOG_VERBOSITY_SET=1 ./foo
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=0 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=bar
+#1 T112861 C0 0.000000s + cwrap_log_verbosity_set(verbosity=1) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
+#2 T112861 C0 0.000013s   - verbosity 1 set for 7 matches in 7 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
+#3 T112861 C0 0.000023s   } // cwrap_log_verbosity_set()
+#4 T112861 C0 0.000026s + cwrap_log_quiet_until(name=bar) {} // #1 going quiet until function bar() [cwrap_log_quiet_until() ignores verbosity!]
+#5 T112861 C0 0.000029s + bar() { // #1
+- example function
+#6 T112861 C0 0.000030s   + baz() {} // #1
+#7 T112861 C0 0.000034s   } // bar()
+#8 T112861 C0 0.000036s } // main()
+```
+Ask cwrap compiled `foo`  to run with full verbosity except verbosity for `bar()` disables its output:
+```
+$ CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=0 CWRAP_LOG_VERBOSITY_SET=1:9=function~bar ./foo
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1:9=function~bar (<verbosity>[={file|function}~<keyword>][:...]) _STATS=0 _SHOW=0 _CURT=0 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+#1 T113079 C0 0.000000s + cwrap_log_verbosity_set() { #1
+#2 T113079 C0 0.000007s   - verbosity=1:9=function~bar
+#3 T113079 C0 0.000035s   - [cwrap_log_verbosity_set() ignores verbosity!]
+#4 T113079 C0 0.000040s   - verbosity 1 set for 7 matches in 7 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
+#5 T113079 C0 0.000043s   - verbosity 9 set for 1 matches in 7 functions for 14 byte clause '9=function~bar' // type=FUNCTION keyword=bar
+#6 T113079 C0 0.000045s   } // cwrap_log_verbosity_set()
+#7 T113079 C0 0.000048s + main() { #1
+- example function
+#8 T113079 C0 0.000049s   + baz() { #1
+#9 T113079 C0 0.000054s     } // baz()
+#10 T113079 C0 0.000056s   } // main()
+```
+Environment variables which influence cwrap at run-time
+-----------
+- `CWRAP_LOG_NUM=1`: Display line count on each output line.
+- `CWRAP_LOG_TIMESTAMP=1`: Display elapsed seconds on each output line.
+- `CWRAP_LOG_THREAD_ID=1`: Display thread ID on each output line.
+- `CWRAP_LOG_COR_ID=1`: Display coroutine ID on each output line.
+- `CWRAP_LOG_STACK_PTR=1`: Display coroutine stack pointer on each output line.
+- `CWRAP_LOG_UNWIND=1`: Experimental option for debugging coroutine stack corruption.
+- `CWRAP_LOG_ON_VALGRIND`: Experimental option for debugging coroutine stack corruption.
+- `CWRAP_LOG_CURT=1`: Allow function entry and exit output lines to be folded together where possible.
+- `CWRAP_LOG_FILE=1`: Output to file instead of stdout.
+- `CWRAP_LOG_QUIET_UNTIL=<function>`: Ignore verbosity until function has been called.
+- `CWRAP_LOG_VERBOSITY_SET=<verbosity>[={file|function}~<keyword>][:...]`: Set function verbosity [1].
+- `CWRAP_LOG_SHOW=1`: List all instrumented functions and exit.
+
+[1] Note: `cwrap_log_verbosity_set("<verbosity>[={file|function}~<keyword>][:...]")` works at run-time too.
+
+How to build and test cwrap?
+--------------------------
+
+- cwrap is currently one Perl script and does not need 'building' itself.
+- The cwrap Perl script has embedded all the cwrap C source code needed to make everything work.
+- cwrap comes with some tests here: https://github.com/corelight/cwrap/tree/master/test
+
+How does cwrap work?
+-----------
+When gcc is normally called to compile or link, cwrap is called instead and sees all the same command line options. cwrap works roughly as follows:
+
+- **At compile-time**: cwrap alters command line options, e.g. add `-finstrument-functions`, & calls 'real' gcc.
+- **At compile-time**: Instead of compiling C/C++ directly to object files, cwrap compiles to assembler files.
+- **At compile-time**: Once the assembler file is created, cwrap modifies it before assembling it to an object file.
+- **At link-time**: cwrap attempts to link but all the struct instances for each instrumented function will be missing.
+- **At link-time**: cwrap generates source code for each struct instance on-the-fly & links again successfully.
+- **At run-time**: Upon starting, cwrap is the first code executing in the process; before e.g. C++ initialization etc.
+- **At run-time**: As the first code executed, cwrap initializes & traces other C/C++ code running prior to `main()`.
+- **At run-time**: The user influences cwrap by setting environment variables which are read at initialization time.
+- **At exit-time**: cwrap can display statistics, e.g. how many functions were called how many times.
 
 How is cwrap different from the gcc `-finstrument-functions` option?
 -----------
@@ -38,20 +166,6 @@ How is cwrap different from the gcc `-finstrument-functions` option?
     + foo(param_1=123 param_2=456) {} = 789 // #1 <-- user adds parameter & return value info
 ```
 
-How does cwrap work?
------------
-When gcc is normally called to compile or link, cwrap is called instead and sees all the same command line options. cwrap works roughly as follows:
-
-- **At compile-time**: cwrap alters command line options, e.g. add `-finstrument-functions`, & calls 'real' gcc.
-- **At compile-time**: Instead of compiling C/C++ directly to object files, cwrap compiles to assembler files.
-- **At compile-time**: Once the assembler file is created, cwrap modifies it before assembling it to an object file.
-- **At link-time**: cwrap attempts to link but all the struct instances for each instrumented function will be missing.
-- **At link-time**: cwrap generates source code for each struct instance on-the-fly & links again successfully.
-- **At run-time**: Upon starting, cwrap is the first code executing in the process; before e.g. C++ initialization etc.
-- **At run-time**: As the first code executed, cwrap initializes & traces other C/C++ code running prior to `main()`.
-- **At run-time**: The user influences cwrap by setting environment variables which are read at initialization time.
-- **At exit-time**: cwrap can display statistics, e.g. how many functions were called how many times.
-
 How is cwrap useful for code comprehension, debugging, and light performance analysis?
 -----------
 
@@ -62,14 +176,6 @@ How is cwrap useful for code comprehension, debugging, and light performance ana
 - **Debugging failing tests**: Let's say your project has some automated tests but one of the tests fails about 10% of the time; a so-called 'flappy' test. Often the easiest and quickest way to debug is to compare the cwrap output from a good test run to a bad test run. If there is no difference in the output then it means you have to add more cwrap instrumentation until there is a difference. Usually, a quick compare of the output makes it obvious what in the production code and/or test code needs changing. This is often the quickest way to debug and leverages the groomed permanent instrumentation via cwrap.
 
 - **Performance analysis**: Because cwrap can be configured to show a time-stamp on every output line, it's easy to see the time difference between arbitrary function calls anywhere in the run-time call-tree. However, without verbosity control, the cwrap output of larger code bases can be overwhelming. Also, all that output comes at a price, which slows down the execution of the process. In general, the more cwrap output means the process performs slower with the timing becoming less meaningful, and the closer the cwrap output gets to little or no output then the more meaningful the timing becomes and closer to reality. So because cwrap allows accurate dynamic control over verbosity, it's possible to get a good and accurate idea of how fast certain sections of code take. It's also possible to code in run-time paranoia checks which hardly slow down the execution, e.g. time some code but only show instrumentation at run-time as a performance warning if the code to unexpectedly long to execute.
-
-How to build and test cwrap?
---------------------------
-
-- cwrap is currently one Perl script and does not need 'building' itself.
-- The cwrap Perl script has embedded all the cwrap C source code needed to make everything work.
-- cwrap comes with some tests here: https://github.com/corelight/cwrap/tree/master/test
-
 
 What is not implemented yet?
 --------------------------

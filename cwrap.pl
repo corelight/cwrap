@@ -302,6 +302,17 @@ sub pretty_asm {
     return $asm_line;
 }
 
+# e.g. these types are the same but out of order:
+#      my_func(const unsigned char*, long unsigned int, unsigned char*)
+#      my_func(unsigned char const*, unsigned long, unsigned char*)
+sub demangle_name_sanitize_type_order {
+    my ($demangled_name) = @_;
+    $demangled_name =~ s~(char|short|int|long|float|double) (unsigned|signed)~$2 $1~g; # todo: figure out a better way to order types
+    while ($demangled_name =~ s~(unsigned|signed|char|short|int|long|float|double) const~const $1~g) {} # todo: figure out a better way to order types
+    $demangled_name =~ s~(long) int\s*~$1~g; # 'long int' same as 'long'; see: https://stackoverflow.com/questions/17287957/is-long-unsigned-as-valid-as-unsigned-long-in-c
+    return $demangled_name;
+}
+
 sub demangle_name {
     my ( $mangled_name) = @_;
     my $demangled_name;
@@ -341,7 +352,7 @@ sub demangle_name {
         $log .= sprintf qq[%f WARNING: internal: failed to demangle name using c++filt or llvm-cxxfilt: %s\n], Time::HiRes::time() - $ts, $mangled_name;
 
         GOT_DEMANGLED_NAME:;
-        $demangled_name =~ s~char const~const char~g;
+        $demangled_name = demangle_name_sanitize_type_order($demangled_name);
     }
     else {
         $demangled_name = $mangled_name;
@@ -773,6 +784,7 @@ EOF
     foreach my $i (@s_file_line_index) {
         my ($line, $label) = $s_file_lines[$i -0] =~ m~pushsection __cwrap.*\.int (\d+); \.asciz "\$([^"]+)"~;
         my ($pretty_function) = $s_file_line =~ m~$label\:\s+\.string\s+"([^"]+)"~s;
+        $log .= sprintf qq[%f   - cwrap: pretty_function=%s\n], Time::HiRes::time() - $ts, $pretty_function if($debug_search);
         cwrap_die(sprintf qq[%f ERROR: cwrap: cannot find pretty_function via label: %s!\n], Time::HiRes::time() - $ts, $label) if (not defined $pretty_function);
 
         my $demangled = $pretty_function;
@@ -785,10 +797,13 @@ EOF
             $demangled =~ s~ \[with .*~~; # stip [with ...] part
         }
         else {
-            $demangled =~ s~^[^\s\(]+\s+~~; # strip return type from e.g. int main()
+            while ($demangled =~ s~^[^\s\(]+\s+~~) {} # strip return type from e.g. unsigned char * my_func()
         }
+        $log .= sprintf qq[%f   - cwrap: demangled=%s\n], Time::HiRes::time() - $ts, $demangled if($debug_search);
+        $demangled = demangle_name_sanitize_type_order($demangled);
+        $log .= sprintf qq[%f   - cwrap: demangled=%s <-- after type sanitization\n], Time::HiRes::time() - $ts, $demangled if($debug_search);
         if (not exists $h_demangled_2_mangled->{$demangled}) {
-            $log .= sprintf qq[%f   - cwrap: removing (...) because cannot find demangled function: %s\n], Time::HiRes::time() - $ts, $demangled if (not exists $h_demangled_2_mangled->{$demangled});
+            $log .= sprintf qq[%f   - cwrap: removing parameters (...) because cannot find demangled function: %s\n], Time::HiRes::time() - $ts, $demangled;
             $demangled =~ s~\(.*$~~; # strip (<params>) from e.g. int main()
         }
         if (not exists $h_demangled_2_mangled->{$demangled}) {
@@ -1295,13 +1310,45 @@ CWRAP_DATA * cwrap_data_start = $mangled_name_last;
 
 #define CWRAP_FUNCTION_NAME_SIZE_MAX (256)
 
-char       cwrap_function_name___do_global_ctors_aux[CWRAP_FUNCTION_NAME_SIZE_MAX];
-char       cwrap_function_name_main                 [CWRAP_FUNCTION_NAME_SIZE_MAX];
-char       cwrap_function_name_start                [CWRAP_FUNCTION_NAME_SIZE_MAX];
-int        cwrap_function_names_found                = 0;
-unw_word_t cwrap_function_addr___do_global_ctors_aux = 0;
-unw_word_t cwrap_function_addr_main                  = 0;
-unw_word_t cwrap_function_addr_start                 = 0;
+__thread char cwrap_log_dump_hex_buffer[256];
+char          cwrap_function_name___do_global_ctors_aux[CWRAP_FUNCTION_NAME_SIZE_MAX];
+char          cwrap_function_name_main                 [CWRAP_FUNCTION_NAME_SIZE_MAX];
+char          cwrap_function_name_start                [CWRAP_FUNCTION_NAME_SIZE_MAX];
+int           cwrap_function_names_found                = 0;
+unw_word_t    cwrap_function_addr___do_global_ctors_aux = 0;
+unw_word_t    cwrap_function_addr_main                  = 0;
+unw_word_t    cwrap_function_addr_start                 = 0;
+
+// fixme: todo: dump only string, only hex, or mixed
+// fixme: todo: change to output index
+// fixme: todo: add asserts
+// fixme: todo: add multiple dests
+char * cwrap_log_dump_hex(const void * pointer, int len, int len_max) { // show max len_max bytes of len bytes @ pointer
+    const char * data = (const char *) pointer;
+    int truncated  = len_max < len ? 2   : 0      ;
+    int len_to_use = len < len_max ? len : len_max;
+    cwrap_log_dump_hex_buffer[0] = '"';
+    for (int x = 0; x < len_to_use; x++) {
+        cwrap_log_dump_hex_buffer[1 + x] = ((data[x] < 32) || (data[x] > 127)) ? '_' : data[x];
+    }
+    if (truncated) {
+		cwrap_log_dump_hex_buffer[1 + len_to_use + 0] = '.';
+		cwrap_log_dump_hex_buffer[1 + len_to_use + 1] = '.';
+	}
+    cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 0] = '"';
+    cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 1] = '=';
+    cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 2] = '0';
+    cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 3] = 'x';
+    for (int x = 0; x < len_to_use; x++) {
+        sprintf(&cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (x * 2)], "%%02x", data[x]);
+    }
+    if (truncated) {
+		cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (len_to_use * 2) + 0] = '.';
+		cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (len_to_use * 2) + 1] = '.';
+	}
+    cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (len_to_use * 2) + 2] = 0;
+    return cwrap_log_dump_hex_buffer;
+}
 
 void cwrap_sanity_check_stack() {
     unw_cursor_t    cursor;
@@ -1750,7 +1797,6 @@ extern __thread int    cor_stack_size_main;
 extern __thread int    cor_stack_size_help;
 extern          int    cor_init_called;
 extern          int    cwrap_log_output_on_valgrind;
-
 extern __thread int    cwrap_log_indent[];
 extern          char   cwrap_log_spaces[];
 extern          int    cwrap_log_verbosity;
@@ -1765,6 +1811,7 @@ extern          void   cwrap_log_append(const char * format, ...);
 extern const    char * cwrap_log_result_get(void);
 extern const    char * cwrap_log_append_get(void);
 extern          void   cwrap_log_params(const char * format, ...);
+extern          char * cwrap_log_dump_hex(const void * pointer, int len, int len_max);
 extern          void   cwrap_log_verbosity_set(const char * verbosity);
 extern          void   cwrap_log_stats(void);
 
