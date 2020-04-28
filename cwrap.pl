@@ -1329,7 +1329,7 @@ char * cwrap_log_dump_hex(const void * pointer, int len, int len_max) { // show 
     int len_to_use = len < len_max ? len : len_max;
     cwrap_log_dump_hex_buffer[0] = '"';
     for (int x = 0; x < len_to_use; x++) {
-        cwrap_log_dump_hex_buffer[1 + x] = ((data[x] < 32) || (data[x] > 127)) ? '_' : data[x];
+        cwrap_log_dump_hex_buffer[1 + x] = ((data[x] < 32) || (data[x] > 127)) ? '.' : data[x];
     }
     if (truncated) {
 		cwrap_log_dump_hex_buffer[1 + len_to_use + 0] = '.';
@@ -1720,8 +1720,9 @@ void cwrap_log_init(void)
            cwrap_log_output_on_valgrind   = p_env_on_valgrind ? atoi(p_env_on_valgrind) : CWRAP_LOG_ON_VALGRIND;
     setlocale(LC_NUMERIC, "");
     if (p_env_verbosity) {
-        printf("cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=%%s (<verbosity>[={file|function}~<keyword>][:...]) _STATS=%%d _SHOW=%%d _CURT=%%d _FILE=%%d _NUM=%%d _COR_ID=%%d _THREAD_ID=%%d _STACK_PTR=%%d _TIMESTAMP=%%d _UNWIND=%%d _ON_VALGRIND=%%d _QUIET_UNTIL=%%s\\n",
+        cwrap_log_plain("cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=%%s (<verbosity>[={file|function}~<keyword>][:...]) _QUIET_UNTIL=%%s _STATS=%%d _SHOW=%%d _CURT=%%d _FILE=%%d _NUM=%%d _COR_ID=%%d _THREAD_ID=%%d _STACK_PTR=%%d _TIMESTAMP=%%d _UNWIND=%%d _ON_VALGRIND=%%d\\n",
             p_env_verbosity,
+            p_env_quiet_until,
             stats,
             show,
             cwrap_log_output_curt,
@@ -1732,17 +1733,8 @@ void cwrap_log_init(void)
             cwrap_log_output_stack_pointer,
             cwrap_log_output_elapsed_time,
             cwrap_log_output_unwind,
-            cwrap_log_output_on_valgrind,
-            p_env_quiet_until);
-        //fixme cwrap_log_output_num                             = num      ;
-        //fixme cwrap_log_output_curt                            = curt     ;
-        //fixme cwrap_log_output_file                            = file     ;
-        //fixme cwrap_log_output_cor_id                          = cor_id   ;
-        //fixme cwrap_log_output_unwind                          = unwind   ;
-        //fixme cwrap_log_output_thread_id                       = thread_id;
-        //fixme cwrap_log_output_stack_pointer                   = stack_ptr;
-        //fixme cwrap_log_output_elapsed_time                    = timestamp;
-        cwrap_data_cwrap_log_verbosity_set.verbosity     = 1        ;
+            cwrap_log_output_on_valgrind);
+        cwrap_data_cwrap_log_verbosity_set.verbosity = 1;
         cwrap_log_verbosity_set(p_env_verbosity);
 #ifdef COR_XXHASH_STACK
         cwrap_log_verbosity_set("9=function~cor_xxhash_stack");
@@ -1821,11 +1813,11 @@ extern          void   cwrap_log_stats(void);
 
 // The extra indirection is to ensure that the __LINE__ string comes through OK.
 
-#define CWRAP_LOG_PARAMS(...) _generic_printf(cwrap_log_params, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
-#define CWRAP_LOG_RESULT(...) _generic_printf(cwrap_log_result, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
-#define CWRAP_LOG_APPEND(...) _generic_printf(cwrap_log_append, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
-#define CWRAP_LOG_DEBUG(...)  _generic_printf(cwrap_log       , __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
-#define CWRAP_LOG_PLAIN(...)  _generic_printf(cwrap_log_plain , __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
+#define CWRAP_PARAMS(...) _generic_printf(cwrap_log_params, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
+#define CWRAP_RESULT(...) _generic_printf(cwrap_log_result, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
+#define CWRAP_APPEND(...) _generic_printf(cwrap_log_append, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
+#define CWRAP_DEBUG(...)  _generic_printf(cwrap_log       , __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
+#define CWRAP_PLAIN(...)  _generic_printf(cwrap_log_plain , __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
 
 #define params_printf(...) _generic_printf(cwrap_log_params, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
 #define result_printf(...) _generic_printf(cwrap_log_result, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
@@ -1840,9 +1832,9 @@ extern          void   cwrap_log_stats(void);
     if((cwrap_log_verbosity >= cwrap_data_verbosity_dummy_##__counter)  /* get replaced in assembler file! */ \\
     && (NULL                == cwrap_log_quiet_until_cw              )){ __function(__VA_ARGS__); }
 
-// note: cwrap_printf() uses regular printf() if function verbosity too low, otherwise promotes to cwrap_log(), i.e. always prints one way or the other!
+// note: CWRAP_PRINTF() uses regular printf() if function verbosity too low, otherwise promotes to cwrap_log(), i.e. always prints one way or the other!
 
-#define cwrap_printf(...)  _promote_printf(cwrap_log, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
+#define CWRAP_PRINTF(...)  _promote_printf(cwrap_log, __PRETTY_FUNCTION__, __COUNTER__, __VA_ARGS__)
 
 #define _promote_printf(_function, _pretty_function, _counter, ...) __promote_printf(_function, _pretty_function, _counter, __VA_ARGS__)
 
