@@ -1871,9 +1871,10 @@ extern          void   cwrap_log_stats(void);
     if((cwrap_log_verbosity >= cwrap_data_verbosity_dummy_##__counter)  /* get replaced in assembler file! */ \\
     && (NULL                == cwrap_log_quiet_until_cw              )){ __function(__VA_ARGS__); } else { printf(__VA_ARGS__); }
 
+// note: only use ... below to avoid "warning: ISO C++ does not permit named variadic macros" described here: https://stackoverflow.com/questions/4786649/are-variadic-macros-nonstandard
 // todo: better integrate asserts with CWRAP_LOG_*() functions
-#define CWRAP_ASSERT_STRERROR(CONDITION,ARGS...) if (!(CONDITION)) { printf("%%05u:%%s: ERROR: assertion: %%d: %%s; ", __LINE__, __FILE__, errno, strerror(errno)); printf(ARGS); fflush(stdout); exit(EXIT_FAILURE); }
-#define CWRAP_ASSERT_INTERNAL(CONDITION,ARGS...) if (!(CONDITION)) { printf("%%05u:%%s: ERROR: assertion: "          , __LINE__, __FILE__                        ); printf(ARGS); fflush(stdout); exit(EXIT_FAILURE); }
+#define CWRAP_ASSERT_STRERROR(CONDITION,...) if (!(CONDITION)) { printf("%%05u:%%s: ERROR: assertion: %%d: %%s; ", __LINE__, __FILE__, errno, strerror(errno)); printf(__VA_ARGS__); fflush(stdout); exit(EXIT_FAILURE); }
+#define CWRAP_ASSERT_INTERNAL(CONDITION,...) if (!(CONDITION)) { printf("%%05u:%%s: ERROR: assertion: "          , __LINE__, __FILE__                        ); printf(__VA_ARGS__); fflush(stdout); exit(EXIT_FAILURE); }
 EOF
 
     # example non-fPIC assembler:     .pushsection __cwrap, "S", \@note; .int 9; .asciz "\$__PRETTY_FUNCTION__.3184"; .popsection
