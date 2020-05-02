@@ -47,8 +47,9 @@ for ( my $c = 0; $c < @ARGV; $c++ ) {
 }
 $arguments =~ s~^\s+~~; # e.g. gcc -O0 -g -o c---example.via-1-line.exe c---example.1.c c---example.2.c
 
-if ($arguments =~ m~\.(cc|cpp|cxx|hpp|hxx)~) { $arguments = "g++ " . $arguments; }
-else                                         { $arguments = "gcc " . $arguments; }
+if    ($arguments =~ m~\.(cc|cpp|cxx|hpp|hxx)~ ) { $arguments = "g++ " . $arguments; } # e.g. compile line
+elsif ($arguments =~ m~\+\+~                   ) { $arguments = "g++ " . $arguments; } # e.g. -std=c++17 or gnu++ or -nostdinc++ etc on link line
+else                                             { $arguments = "gcc " . $arguments; }
 
 my ($gcc_out_file) = $arguments =~ m~-o\s+([^\s]+)~;
 my ($gcc_out_path,
@@ -241,13 +242,17 @@ sub assembler_to_object_or_executable_via_command {
                    $nm_command .= qq[ --dynamic] if (2 == $nm_command_number);
                 my @gcc_command_parts = split(m~\s+~, $gcc_command);
                 foreach my $gcc_command_part (@gcc_command_parts) {
-                    if (($gcc_command_part =~ m~^\-~                )    # e.g. -Wl,-soname,libcaf_core.so.0.17.3
+                    if ($gcc_command_part =~ m~^\@~) { # e.g. @CMakeFiles/zeek.dir/objects1.rsp <-- hopefully containing lots of object files
+                        # fall thru to append
+                    }
+                    elsif (($gcc_command_part =~ m~^\-~                )    # e.g. -Wl,-soname,libcaf_core.so.0.17.3
                     ||  ($gcc_command_part !~ m~\.(o|a|so[\.0-9]*)$~)) { # e.g. logging/writers/sqlite/CMakeFiles/plugin-Zeek-SQLiteWriter.dir/sqlite.bif.init.cc.o ../aux/paraglob/src/ahocorasick/libahocorasick.a ../aux/broker/lib/./libcaf_openssl.so ../aux/broker/lib/libbroker.so.1.2
                         $log .= sprintf qq[%f - cwrap: discarding gcc command  line option: %s\n], Time::HiRes::time() - $ts, $gcc_command_part;
+                        goto SKIP_APPEND;
                     }
-                    else {
-                        $nm_command .= ' ' . $gcc_command_part;
-                    }
+                    # come here to append gcc command part to nm command
+                    $nm_command .= ' ' . $gcc_command_part;
+                    SKIP_APPEND:;
                 }
                 $nm_command .= qq[ 2>&1 | egrep cwrap_data_];
                 $log .= sprintf qq[%f - cwrap: object to binary #1: running via nm #%d (because no source files detected and nm faster than gxx): %s\n], Time::HiRes::time() - $ts, $nm_command_number, $nm_command;
@@ -259,8 +264,31 @@ sub assembler_to_object_or_executable_via_command {
         $log .= sprintf qq[%f - cwrap: using undefines from %s; auto generating: %s\n], Time::HiRes::time() - $ts, $output_type, $cwrap_c;
         using_undefind_error_write_cwrap_c($output, $output_type);
 
+        my $cc_command    = sprintf qq[gcc -c -fPIC -o %s.o %s], $cwrap_c, $cwrap_c; # todo: consider using -Wl,--whole-archive
+        my @gcc_command_parts = split(m~\s+~, $gcc_command);
+        foreach my $gcc_command_part (@gcc_command_parts) {
+            $cc_command .= ' ' . $gcc_command_part if ($gcc_command_part =~ m~-DCWRAP~); # append any CWRAP compile defaults
+        }
+           $log          .= sprintf qq[%f - cwrap: compile cwrap: running: %s\n], Time::HiRes::time() - $ts, $cc_command;
+        my $t1            = Time::HiRes::time();
+           $output        = `$cc_command 2>&1`;
+        my $t2            = Time::HiRes::time();
+        my $exit_code     =  $? >> 8; # perldoc perlvar: the exit value of the subprocess is really ("$? >> 8")
+           $output_2_log  =  $output;
+           $output_2_log  =  "<no output>\n" if ($output =~ m~^\s*$~s);
+           $output_2_log .=  sprintf "<exit(%d)> in %f seconds building object for %s\n", $exit_code, $t2 - $t1, $cwrap_c;
+           $output_2_log  =~ s~^(.*)$~> $1~gm;
+        if ($exit_code != 0) {
+            $log .= $output_2_log;
+            $log .= sprintf qq[%f ERROR: cwrap: compilation to object or executable has unexpected errors\n], Time::HiRes::time() - $ts;
+            $log .= sprintf qq[%f - cwrap: done with exit(%d)\n], Time::HiRes::time() - $ts, $exit_code;
+            printf qq[%s], $output;
+            exit($exit_code);
+        }
+        $log .= $output_2_log;
+
         # see https://en.wikipedia.org/wiki/Gold_%28linker%29
-           $gcc_command  .= sprintf qq[ -fPIC %s -Wl,--undefined,cwrap_log_init -lunwind], $cwrap_c; # todo: consider using -Wl,--whole-archive
+           $gcc_command  .= sprintf qq[ %s.o -Wl,--undefined,cwrap_log_init -fPIC -lunwind], $cwrap_c;
            $gcc_command  .= qq[ -fuse-ld=gold] if ($os_release !~ m~Alpine~i); # gold linker seems dodgy on Alpine Linux
            $log          .= sprintf qq[%f - cwrap: object to binary #2: running: %s\n], Time::HiRes::time() - $ts, $gcc_command;
         my $t1            = Time::HiRes::time();
