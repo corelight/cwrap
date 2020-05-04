@@ -39,7 +39,7 @@ int main() {
         bar(i);
 #ifdef CWRAP
         if (0 == i) {
-            cwrap_log_verbosity_set("2=function~bar");
+            cwrap_log_verbosity_set("2=function-bar");
         }
 #endif
     }

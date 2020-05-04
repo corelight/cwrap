@@ -211,7 +211,55 @@ sub assembler_to_object_or_executable_via_command {
     if ((0 == scalar @exe_file_arguments)    # if no undefined cwrap_data_* because assembling to object files, or
     ||  ($gcc_command =~ m~\-shared~    )) { # if no undefined cwrap_data_* because creating a shared object
         # come here if gxx operation results in no undefined cwrap_data_*
-           $log          .=  sprintf qq[%f - cwrap: no undefined cwrap_data_*: running: %s\n], Time::HiRes::time() - $ts, $gcc_command;
+        if ($gcc_command =~ m~\-shared~) { # if .so loaded at run-time, this might happen before the regular call to cwrap_log_init(); this helps call cwrap_log_init() as early as possible
+			# See https://gcc.gnu.org/legacy-ml/gcc-help/1999-11n/msg00029.html    <-- example using "__attribute__((constructor))" mechanism
+            # See https://groups.google.com/forum/#!topic/gnu.gcc.help/Fit5UOU9UNs <-- why NOT to use "-Wl,-init,<function>" mechanism for shared object
+            my $cwrap_so_c_file = $gcc_out_file . ".cwrap.c"; # e.g. "lib/libbroker.so.1.3"
+            $log .= sprintf qq[%f - cwrap: creating cwrap constructor for .so file: %s\n], Time::HiRes::time() - $ts, $cwrap_so_c_file;
+            my $new_file_contents = sprintf <<EOF;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern int cwrap_log_init(void);
+extern int cwrap_log_init_so(void) __attribute__ ((constructor));
+
+int cwrap_log_init_so(void) {
+    return cwrap_log_init();
+}
+
+#ifdef __cplusplus
+}
+#endif
+EOF
+
+            open(my $out, '>', $cwrap_so_c_file) || cwrap_die(sprintf qq[%f ERROR: cwrap: cannot open file for writing: %s\n], Time::HiRes::time() - $ts, $cwrap_so_c_file);
+            syswrite($out, $new_file_contents);
+            close $out;
+
+            my $cc_command    = sprintf qq[gcc -c -fPIC -o %s.o %s], $cwrap_so_c_file, $cwrap_so_c_file;
+               $log          .= sprintf qq[%f - cwrap: compile cwrap so constructor: running: %s\n], Time::HiRes::time() - $ts, $cc_command;
+            my $t1            = Time::HiRes::time();
+               $output        = `$cc_command 2>&1`;
+            my $t2            = Time::HiRes::time();
+            my $exit_code     =  $? >> 8; # perldoc perlvar: the exit value of the subprocess is really ("$? >> 8")
+               $output_2_log  =  $output;
+               $output_2_log  =  "<no output>\n" if ($output =~ m~^\s*$~s);
+               $output_2_log .=  sprintf "<exit(%d)> in %f seconds building object for %s\n", $exit_code, $t2 - $t1, $cwrap_c;
+               $output_2_log  =~ s~^(.*)$~> $1~gm;
+            if ($exit_code != 0) {
+                $log .= $output_2_log;
+                $log .= sprintf qq[%f ERROR: cwrap: compilation to object or executable has unexpected errors\n], Time::HiRes::time() - $ts;
+                $log .= sprintf qq[%f - cwrap: done with exit(%d)\n], Time::HiRes::time() - $ts, $exit_code;
+                printf qq[%s], $output;
+                exit($exit_code);
+            }
+            $log .= $output_2_log;
+
+            $gcc_command =~ s~^([^ ]+) ~$1 $cwrap_so_c_file.o ~; # order important: insert as the very first file to be linked! so that the cwrap constructor is the first to be called at run-time!
+        }
+
+           $log          .= sprintf qq[%f - cwrap: no undefined cwrap_data_*: running: %s\n], Time::HiRes::time() - $ts, $gcc_command;
         my $t1            = Time::HiRes::time();
            $output        =  `$gcc_command 2>&1`;
         my $t2            = Time::HiRes::time();
@@ -264,7 +312,7 @@ sub assembler_to_object_or_executable_via_command {
         $log .= sprintf qq[%f - cwrap: using undefines from %s; auto generating: %s\n], Time::HiRes::time() - $ts, $output_type, $cwrap_c;
         using_undefind_error_write_cwrap_c($output, $output_type);
 
-        my $cc_command    = sprintf qq[gcc -c -fPIC -o %s.o %s], $cwrap_c, $cwrap_c; # todo: consider using -Wl,--whole-archive
+        my $cc_command    = sprintf qq[gcc -c -fPIC -o %s.o %s -Wl,--undefined,cwrap_log_init], $cwrap_c, $cwrap_c; # todo: consider using -Wl,--whole-archive
         my @gcc_command_parts = split(m~\s+~, $gcc_command);
         foreach my $gcc_command_part (@gcc_command_parts) {
             $cc_command .= ' ' . $gcc_command_part if ($gcc_command_part =~ m~-DCWRAP~); # append any CWRAP compile defaults
@@ -1445,7 +1493,7 @@ void cwrap_log_show(void * func_addr) { // NULL means show all functions
             // skip display of this function
         }
         else {
-            cwrap_log("#%%'d: verbosity %%d for %%'d of %%'d function variation for %%s() from %%s\\n", k, cwd->verbosity, cwd->variation_x, cwd->of_y_variations, &cwd->name[0], &cwd->file[0]);
+            cwrap_log("#%%'d: verbosity %%d for %%'d of %%'d function variation(s) for %%s() from %%s\\n", k, cwd->verbosity, cwd->variation_x, cwd->of_y_variations, &cwd->name[0], &cwd->file[0]);
         }
         cwd = cwd->next;
     } while (cwd);
@@ -1569,7 +1617,7 @@ void cwrap_log_stats(void) {
     CWRAP_DATA * cwd = cwrap_data_start;
     do {
         if (cwd->calls > 0) {
-            cwrap_log("%%'d calls to %%'d of %%'d function variation for %%s()\\n", cwd->calls, cwd->variation_x, cwd->of_y_variations, &cwd->name[0]);
+            cwrap_log("%%'d calls to %%'d of %%'d function variation(s) for %%s()\\n", cwd->calls, cwd->variation_x, cwd->of_y_variations, &cwd->name[0]);
             i += cwd->calls;
             j ++;
         }
@@ -1600,7 +1648,10 @@ typedef struct CWRAP_CLAUSE {
     CWRAP_CLAUSE      * next;
 } CWRAP_CLAUSE;
 
-void cwrap_log_verbosity_set(const char * verbosity) { // e.g. 1:9=file~libarchive:9=function~cor_switch
+#define CWRAP_LOG_VERBOSITY_CLAUSE_SEPARATOR   '/'
+#define CWRAP_LOG_VERBOSITY_CLAUSE_MATCH_START "-"
+
+void cwrap_log_verbosity_set(const char * verbosity) { // e.g. 1/9=file-libarchive/9=function-cor_switch/9=function-::~
     __cyg_profile_func_enter_always(NULL, &cwrap_data_cwrap_log_verbosity_set);
     cwrap_log_params("verbosity=%%s", verbosity);
     cwrap_log_append("[%%s() ignores verbosity!]", __FUNCTION__);
@@ -1615,7 +1666,7 @@ void cwrap_log_verbosity_set(const char * verbosity) { // e.g. 1:9=file~libarchi
     goto CLAUSE_INIT;
     do {
         c = verbosity[pos];
-        if ((':' == c) || (0 == c)) {
+        if ((CWRAP_LOG_VERBOSITY_CLAUSE_SEPARATOR == c) || (0 == c)) {
             // come here if end of verbosity clause
                    clause_len        = pos - clause_this->pos;
                    clause_this->text = (char *) alloca(1 + clause_len);
@@ -1626,7 +1677,7 @@ void cwrap_log_verbosity_set(const char * verbosity) { // e.g. 1:9=file~libarchi
             clause_this->verbosity = atoi(&verbosity[clause_this->pos]);
             clause_this->type      = strcasestr(clause_this->text, "=file"    ) ? CWRAP_CLAUSE_TYPE_FILE     : clause_this->type;
             clause_this->type      = strcasestr(clause_this->text, "=function") ? CWRAP_CLAUSE_TYPE_FUNCTION : clause_this->type;
-            clause_this->keyword   = strcasestr(clause_this->text, "~");
+            clause_this->keyword   = strcasestr(clause_this->text, CWRAP_LOG_VERBOSITY_CLAUSE_MATCH_START);
             if (clause_this->keyword) {
                 // come here if ~ is found, point to the char after ~
                 if (CWRAP_CLAUSE_TYPE_ANY == clause_this->type) { cwrap_log("ERROR: CWRAP: Found ~<keyword> but cannot find ={file|function} in clause '%%s'\\n", clause_this->text); exit(1); }
@@ -1718,10 +1769,21 @@ __attribute__((weak)) void cor_init(void)
 // This function gets called *before* main() and hopefully *before* C++ initialization.
 // It is completely silent unless verbosity is being switched on.
 // The asm voodoo to make this work is described here [1].
+// However, due to pre-main complexity [2] stuff could and can start-up before this :-(
+// This also means that atexit() called here might not end up being the last function called too.
 // [1] https://stackoverflow.com/questions/2053029/how-exactly-does-attribute-constructor-work
-void cwrap_log_init(void)
+// [2] https://www.gnu.org/software/hurd/glibc/startup.html
+int cwrap_log_init_called = 0;
+
+int cwrap_log_init(void)
 {
     __asm__ (".section .init \\n call cwrap_log_init \\n .section .text\\n");
+
+    if (cwrap_log_init_called)
+        goto EARLY_OUT;
+
+    cwrap_log_init_called ++;
+
     char * p_env_verbosity                = getenv("CWRAP_LOG_VERBOSITY_SET");
     char * p_env_stats                    = getenv("CWRAP_LOG_STATS");
     char * p_env_num                      = getenv("CWRAP_LOG_NUM");
@@ -1748,7 +1810,7 @@ void cwrap_log_init(void)
            cwrap_log_output_on_valgrind   = p_env_on_valgrind ? atoi(p_env_on_valgrind) : CWRAP_LOG_ON_VALGRIND;
     setlocale(LC_NUMERIC, "");
     if (p_env_verbosity) {
-        cwrap_log_plain("cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=%%s (<verbosity>[={file|function}~<keyword>][:...]) _QUIET_UNTIL=%%s _STATS=%%d _SHOW=%%d _CURT=%%d _FILE=%%d _NUM=%%d _COR_ID=%%d _THREAD_ID=%%d _STACK_PTR=%%d _TIMESTAMP=%%d _UNWIND=%%d _ON_VALGRIND=%%d\\n",
+        cwrap_log_plain("cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=%%s (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=%%s _STATS=%%d _SHOW=%%d _CURT=%%d _FILE=%%d _NUM=%%d _COR_ID=%%d _THREAD_ID=%%d _STACK_PTR=%%d _TIMESTAMP=%%d _UNWIND=%%d _ON_VALGRIND=%%d\\n",
             p_env_verbosity,
             p_env_quiet_until,
             stats,
@@ -1780,7 +1842,20 @@ void cwrap_log_init(void)
         cwrap_log_show(NULL);
         exit(0);
     }
+
+    EARLY_OUT:;
+    return 0;
 }
+
+#if 0
+// this method seems promising and .preinit works before .init section, but worked on Zeek but not on cwrap tests?!
+// see https://stackoverflow.com/questions/32700494/executing-init-and-fini
+static void preinit(int argc, char **argv, char **envp) {
+    cwrap_log_init();
+}
+
+__attribute__((section(".preinit_array"), used)) static typeof(preinit) *preinit_p = preinit;
+#endif
 
 #ifdef __cplusplus
 }
@@ -1803,7 +1878,7 @@ extern "C" {
 #define CWRAP_LOG_INIT_REF
 // help to force inclusion of cwrap_log_init() even if static library shenanigans during build process
 // https://stackoverflow.com/questions/2991927/how-to-force-inclusion-of-an-object-file-in-a-static-library-when-linking-into-e
-extern void cwrap_log_init(void);
+extern int cwrap_log_init(void);
 __attribute__((weak)) void * p_cwrap_log_init = (void *) &cwrap_log_init; // fixme
 #endif
 

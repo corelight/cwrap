@@ -593,7 +593,7 @@ C0   } // cwrap_log_show()
 - Note: `cwrap_log_verbosity_set()` is called within the example C++ source code to dynamically change the verbosity at run-time.
 ```
 $ cat build/language-cpp-example-1-cwrap-include-long-make-via-n-line-opt-O3/run.log
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
 C0 + cwrap_log_verbosity_set() { #1
 C0   - verbosity=1
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
@@ -636,9 +636,9 @@ C0       } // baz()
 C0     - return r=2
 C0     } // bar()
 C0   + cwrap_log_verbosity_set() { #2
-C0     - verbosity=2=function~bar
+C0     - verbosity=2=function-bar
 C0     - [cwrap_log_verbosity_set() ignores verbosity!]
-C0     - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0     - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function-bar' // type=FUNCTION keyword=bar
 C0     } // cwrap_log_verbosity_set()
 C0   + baz() { #2
 C0     - a=2
@@ -775,14 +775,14 @@ C0   - 45 calls to 22 of 24 functions instrumented
 C0   } // cwrap_log_stats()
 ```
 
-- This 2nd run in `run.log` uses `CWRAP_LOG_VERBOSITY_SET=9:1=FUNCTION~my_` to dynamically disable all instrumented functions except for functions with names containing the text `my_`.
+- This 2nd run in `run.log` uses `CWRAP_LOG_VERBOSITY_SET=9:1=FUNCTION-my_` to dynamically disable all instrumented functions except for functions with names containing the text `my_`.
 ```
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=9:1=FUNCTION~my_ (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=9:1=FUNCTION-my_ (<verbosity>[={file|function}-<keyword>][/...]) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
 C0 + cwrap_log_verbosity_set() { #1
-C0   - verbosity=9:1=FUNCTION~my_
+C0   - verbosity=9:1=FUNCTION-my_
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
 C0   - verbosity 9 set for 24 matches in 24 functions for 1 byte clause '9' // type=FILE|FUNCTION keyword=(null)
-C0   - verbosity 1 set for 5 matches in 24 functions for 14 byte clause '1=FUNCTION~my_' // type=FUNCTION keyword=my_
+C0   - verbosity 1 set for 5 matches in 24 functions for 14 byte clause '1=FUNCTION-my_' // type=FUNCTION keyword=my_
 C0   } // cwrap_log_verbosity_set()
 C0 + my_struct::my_struct() { #1
 C0   - arg1=my_struct_1
@@ -793,9 +793,9 @@ C0   - arg1=my_struct_2
 C0   - constructing my_struct
 C0   } // my_struct::my_struct()
 C0 + cwrap_log_verbosity_set() { #2
-C0   - verbosity=2=function~bar
+C0   - verbosity=2=function-bar
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
-C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function-bar' // type=FUNCTION keyword=bar
 C0   } // cwrap_log_verbosity_set()
 C0 + my_struct::my_struct() { #3
 C0   - arg1=my_struct_2
@@ -847,7 +847,7 @@ C0   } // cwrap_log_stats()
 
 - This 3rd run in `run.log` uses `CWRAP_LOG__QUIET_UNTIL=bye_baz` to dynamically disable all instrumented function until the function `bye_baz()` starts executing.
 ```
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=bye_baz
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=bye_baz
 C0 + cwrap_log_verbosity_set() { #1
 C0   - verbosity=1
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
@@ -859,9 +859,9 @@ C0   - going quiet until function bye_baz()
 C0   -  [cwrap_log_quiet_until() ignores verbosity!]
 C0   } // cwrap_log_quiet_until()
 C0 + cwrap_log_verbosity_set() { #2
-C0   - verbosity=2=function~bar
+C0   - verbosity=2=function-bar
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
-C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function-bar' // type=FUNCTION keyword=bar
 C0   } // cwrap_log_verbosity_set()
 C0 + bye_baz() { #1
 C0   - called via atexit() via baz()
@@ -913,7 +913,7 @@ $ cat build/language-cpp-example-1-cwrap-include-curt-make-via-n-line-opt-O3/run
 
 ```
 $ cat build/language-cpp-example-1-cwrap-include-curt-make-via-n-line-opt-O3/run.log
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=1 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _STATS=1 _SHOW=0 _CURT=1 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
 C0 + cwrap_log_verbosity_set(verbosity=1) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
 C0   - verbosity 1 set for 24 matches in 24 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
 C0   } // cwrap_log_verbosity_set()
@@ -936,8 +936,8 @@ C0     } // qux()
 C0   + bar(a=0) { // #1
 C0     + baz(a=1) {} = r=2 // #1
 C0     } = r=2 // bar()
-C0   + cwrap_log_verbosity_set(verbosity=2=function~bar) { // #2 [cwrap_log_verbosity_set() ignores verbosity!]
-C0     - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0   + cwrap_log_verbosity_set(verbosity=2=function-bar) { // #2 [cwrap_log_verbosity_set() ignores verbosity!]
+C0     - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function-bar' // type=FUNCTION keyword=bar
 C0     } // cwrap_log_verbosity_set()
 C0   + baz(a=2) {} = r=3 // #2
 C0   + baz(a=3) {} = r=4 // #3
@@ -1010,17 +1010,17 @@ C0   - 1 calls to 1 of 1 function variation for _GLOBAL__sub_I_cpp_example_1_a_c
 C0   - 45 calls to 22 of 24 functions instrumented
 C0   } // cwrap_log_stats()
 ```
-- This 2nd run in `run.log` -- with cwrap 'curt' output -- uses `CWRAP_LOG_VERBOSITY_SET=9:1=FUNCTION~my_` to dynamically disable all instrumented functions except for functions with names containing the text `my_`.
+- This 2nd run in `run.log` -- with cwrap 'curt' output -- uses `CWRAP_LOG_VERBOSITY_SET=9:1=FUNCTION-my_` to dynamically disable all instrumented functions except for functions with names containing the text `my_`.
 ```
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=9:1=FUNCTION~my_ (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=1 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
-C0 + cwrap_log_verbosity_set(verbosity=9:1=FUNCTION~my_) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=9:1=FUNCTION-my_ (<verbosity>[={file|function}-<keyword>][/...]) _STATS=1 _SHOW=0 _CURT=1 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+C0 + cwrap_log_verbosity_set(verbosity=9:1=FUNCTION-my_) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
 C0   - verbosity 9 set for 24 matches in 24 functions for 1 byte clause '9' // type=FILE|FUNCTION keyword=(null)
-C0   - verbosity 1 set for 5 matches in 24 functions for 14 byte clause '1=FUNCTION~my_' // type=FUNCTION keyword=my_
+C0   - verbosity 1 set for 5 matches in 24 functions for 14 byte clause '1=FUNCTION-my_' // type=FUNCTION keyword=my_
 C0   } // cwrap_log_verbosity_set()
 C0 + my_struct::my_struct(arg1=my_struct_1) {} // #1 constructing my_struct
 C0 + my_struct::my_struct(arg1=my_struct_2) {} // #2 constructing my_struct
-C0 + cwrap_log_verbosity_set(verbosity=2=function~bar) { // #2 [cwrap_log_verbosity_set() ignores verbosity!]
-C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0 + cwrap_log_verbosity_set(verbosity=2=function-bar) { // #2 [cwrap_log_verbosity_set() ignores verbosity!]
+C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function-bar' // type=FUNCTION keyword=bar
 C0   } // cwrap_log_verbosity_set()
 C0 + my_struct::my_struct(arg1=my_struct_2) {} // #3 constructing my_struct
 C0 + my_struct::my_struct(arg1=my_struct_3, arg2=a) {} // #1 constructing my_struct
@@ -1047,13 +1047,13 @@ C0   } // cwrap_log_stats()
 
 - This 3rd run in `run.log` -- with cwrap 'curt' output -- uses `CWRAP_LOG__QUIET_UNTIL=bye_baz` to dynamically disable all instrumented function until the function `bye_baz()` starts executing.
 ```
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=1 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=bye_baz
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _STATS=1 _SHOW=0 _CURT=1 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=bye_baz
 C0 + cwrap_log_verbosity_set(verbosity=1) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
 C0   - verbosity 1 set for 24 matches in 24 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
 C0   } // cwrap_log_verbosity_set()
 C0 + cwrap_log_quiet_until(name=bye_baz) {} // #1 going quiet until function bye_baz() [cwrap_log_quiet_until() ignores verbosity!]
-C0 + cwrap_log_verbosity_set(verbosity=2=function~bar) { // #2 [cwrap_log_verbosity_set() ignores verbosity!]
-C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0 + cwrap_log_verbosity_set(verbosity=2=function-bar) { // #2 [cwrap_log_verbosity_set() ignores verbosity!]
+C0   - verbosity 2 set for 1 matches in 24 functions for 14 byte clause '2=function-bar' // type=FUNCTION keyword=bar
 C0   } // cwrap_log_verbosity_set()
 C0 + bye_baz() {} // #1 called via atexit() via baz()
 C0 + bye_baz() {} // #2 called via atexit() via baz()

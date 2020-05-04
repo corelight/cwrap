@@ -1,4 +1,4 @@
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _QUIET_UNTIL=(null) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=(null) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
 C0 + cwrap_log_verbosity_set() { #1
 C0   - verbosity=1
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
@@ -25,9 +25,9 @@ C0       } // baz()
 C0     - return r=2
 C0     } // bar() 
 C0   + cwrap_log_verbosity_set() { #2
-C0     - verbosity=2=function~bar
+C0     - verbosity=2=function-bar
 C0     - [cwrap_log_verbosity_set() ignores verbosity!]
-C0     - verbosity 2 set for 1 matches in 14 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0     - verbosity 2 set for 1 matches in 14 functions for 14 byte clause '2=function-bar' // type=FUNCTION keyword=bar
 C0     } // cwrap_log_verbosity_set() 
 C0   + baz() { #2
 C0     - a=2
@@ -87,31 +87,31 @@ C0   - called via atexit() via baz()
 C0   } // bye_baz() 
 C0 + cwrap_log_stats() { #1
 C0   - [cwrap_log_stats() ignores verbosity!]
-C0   - 1 calls to 1 of 1 function variation for cwrap_log_stats()
-C0   - 2 calls to 1 of 1 function variation for cwrap_log_verbosity_set()
-C0   - 1 calls to 1 of 1 function variation for qux()
-C0   - 3 calls to 1 of 1 function variation for quux()
-C0   - 1 calls to 1 of 1 function variation for my_public()
-C0   - 1 calls to 1 of 1 function variation for my_private()
-C0   - 1 calls to 1 of 1 function variation for main()
-C0   - 1 calls to 1 of 1 function variation for clean_up()
-C0   - 6 calls to 1 of 1 function variation for bye_baz()
-C0   - 1 calls to 1 of 1 function variation for bye()
-C0   - 6 calls to 1 of 1 function variation for baz()
-C0   - 1 calls to 1 of 1 function variation for bar()
+C0   - 1 calls to 1 of 1 function variation(s) for cwrap_log_stats()
+C0   - 2 calls to 1 of 1 function variation(s) for cwrap_log_verbosity_set()
+C0   - 1 calls to 1 of 1 function variation(s) for qux()
+C0   - 3 calls to 1 of 1 function variation(s) for quux()
+C0   - 1 calls to 1 of 1 function variation(s) for my_public()
+C0   - 1 calls to 1 of 1 function variation(s) for my_private()
+C0   - 1 calls to 1 of 1 function variation(s) for main()
+C0   - 1 calls to 1 of 1 function variation(s) for clean_up()
+C0   - 6 calls to 1 of 1 function variation(s) for bye_baz()
+C0   - 1 calls to 1 of 1 function variation(s) for bye()
+C0   - 6 calls to 1 of 1 function variation(s) for baz()
+C0   - 1 calls to 1 of 1 function variation(s) for bar()
 C0   - 25 calls to 12 of 14 functions instrumented
 C0   } // cwrap_log_stats() 
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=9:1=FUNCTION~my_ (<verbosity>[={file|function}~<keyword>][:...]) _QUIET_UNTIL=(null) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=9/1=FUNCTION-my_ (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=(null) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
 C0 + cwrap_log_verbosity_set() { #1
-C0   - verbosity=9:1=FUNCTION~my_
+C0   - verbosity=9/1=FUNCTION-my_
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
 C0   - verbosity 9 set for 14 matches in 14 functions for 1 byte clause '9' // type=FILE|FUNCTION keyword=(null)
-C0   - verbosity 1 set for 2 matches in 14 functions for 14 byte clause '1=FUNCTION~my_' // type=FUNCTION keyword=my_
+C0   - verbosity 1 set for 2 matches in 14 functions for 14 byte clause '1=FUNCTION-my_' // type=FUNCTION keyword=my_
 C0   } // cwrap_log_verbosity_set() 
 C0 + cwrap_log_verbosity_set() { #2
-C0   - verbosity=2=function~bar
+C0   - verbosity=2=function-bar
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
-C0   - verbosity 2 set for 1 matches in 14 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0   - verbosity 2 set for 1 matches in 14 functions for 14 byte clause '2=function-bar' // type=FUNCTION keyword=bar
 C0   } // cwrap_log_verbosity_set() 
 C0 + my_public() { #1
 C0   - a=100
@@ -124,12 +124,12 @@ C0   - return r=104
 C0   } // my_public() 
 C0 + cwrap_log_stats() { #1
 C0   - [cwrap_log_stats() ignores verbosity!]
-C0   - 1 calls to 1 of 1 function variation for cwrap_log_stats()
-C0   - 2 calls to 1 of 1 function variation for cwrap_log_verbosity_set()
-C0   - 1 calls to 1 of 1 function variation for my_public()
-C0   - 1 calls to 1 of 1 function variation for my_private()
+C0   - 1 calls to 1 of 1 function variation(s) for cwrap_log_stats()
+C0   - 2 calls to 1 of 1 function variation(s) for cwrap_log_verbosity_set()
+C0   - 1 calls to 1 of 1 function variation(s) for my_public()
+C0   - 1 calls to 1 of 1 function variation(s) for my_private()
 C0   } // cwrap_log_stats() 
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _QUIET_UNTIL=bye_baz _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=bye_baz _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
 C0 + cwrap_log_verbosity_set() { #1
 C0   - verbosity=1
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
@@ -141,9 +141,9 @@ C0   - going quiet until function bye_baz()
 C0   -  [cwrap_log_quiet_until() ignores verbosity!]
 C0   } // cwrap_log_quiet_until() 
 C0 + cwrap_log_verbosity_set() { #2
-C0   - verbosity=2=function~bar
+C0   - verbosity=2=function-bar
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
-C0   - verbosity 2 set for 1 matches in 14 functions for 14 byte clause '2=function~bar' // type=FUNCTION keyword=bar
+C0   - verbosity 2 set for 1 matches in 14 functions for 14 byte clause '2=function-bar' // type=FUNCTION keyword=bar
 C0   } // cwrap_log_verbosity_set() 
 C0 + bye_baz() { #1
 C0   - called via atexit() via baz()
@@ -168,10 +168,10 @@ C0   - called via atexit() via baz()
 C0   } // bye_baz() 
 C0 + cwrap_log_stats() { #1
 C0   - [cwrap_log_stats() ignores verbosity!]
-C0   - 1 calls to 1 of 1 function variation for cwrap_log_stats()
-C0   - 2 calls to 1 of 1 function variation for cwrap_log_verbosity_set()
-C0   - 1 calls to 1 of 1 function variation for cwrap_log_quiet_until()
-C0   - 6 calls to 1 of 1 function variation for bye_baz()
-C0   - 1 calls to 1 of 1 function variation for bye()
+C0   - 1 calls to 1 of 1 function variation(s) for cwrap_log_stats()
+C0   - 2 calls to 1 of 1 function variation(s) for cwrap_log_verbosity_set()
+C0   - 1 calls to 1 of 1 function variation(s) for cwrap_log_quiet_until()
+C0   - 6 calls to 1 of 1 function variation(s) for bye_baz()
+C0   - 1 calls to 1 of 1 function variation(s) for bye()
 C0   - 11 calls to 5 of 14 functions instrumented
 C0   } // cwrap_log_stats() 

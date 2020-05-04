@@ -1,4 +1,3 @@
-
 Auto wrap C and C++ functions with instrumentation
 =========================
 
@@ -47,7 +46,7 @@ C0   } // cwrap_log_show()
 Ask cwrap compiled `foo`  to run with full verbosity with various output line prefixes, and output stats upon exit:
 ```
 $ CWRAP_LOG_STATS=1 CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=1 CWRAP_LOG_VERBOSITY_SET=1 ./foo
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=1 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _STATS=1 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
 #1 T127207 C0 0.000000s + cwrap_log_verbosity_set(verbosity=1) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
 #2 T127207 C0 0.000010s   - verbosity 1 set for 7 matches in 7 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
 #3 T127207 C0 0.000021s   } // cwrap_log_verbosity_set()
@@ -69,7 +68,7 @@ hello world!
 Ask cwrap compiled `foo`  to run but ignore verbosity until `bar()` is executed:
 ```
 $ CWRAP_LOG_QUIET_UNTIL=bar CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=1 CWRAP_LOG_VERBOSITY_SET=1 ./foo
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=0 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=bar
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _STATS=0 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=bar
 #1 T127212 C0 0.000000s + cwrap_log_verbosity_set(verbosity=1) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
 #2 T127212 C0 0.000011s   - verbosity 1 set for 7 matches in 7 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
 #3 T127212 C0 0.000020s   } // cwrap_log_verbosity_set()
@@ -82,13 +81,13 @@ hello world!
 ```
 Ask cwrap compiled `foo`  to run with full verbosity except verbosity for `bar()` disables its output:
 ```
-$ CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=0 CWRAP_LOG_VERBOSITY_SET=1:9=function~bar ./foo
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1:9=function~bar (<verbosity>[={file|function}~<keyword>][:...]) _STATS=0 _SHOW=0 _CURT=0 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+$ CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=0 CWRAP_LOG_VERBOSITY_SET=1/9=function-bar ./foo
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1:9=function-bar (<verbosity>[={file|function}-<keyword>][/...]) _STATS=0 _SHOW=0 _CURT=0 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
 #1 T127218 C0 0.000000s + cwrap_log_verbosity_set() { #1
-#2 T127218 C0 0.000009s   - verbosity=1:9=function~bar
+#2 T127218 C0 0.000009s   - verbosity=1:9=function-bar
 #3 T127218 C0 0.000017s   - [cwrap_log_verbosity_set() ignores verbosity!]
 #4 T127218 C0 0.000025s   - verbosity 1 set for 7 matches in 7 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
-#5 T127218 C0 0.000033s   - verbosity 9 set for 1 matches in 7 functions for 14 byte clause '9=function~bar' // type=FUNCTION keyword=bar
+#5 T127218 C0 0.000033s   - verbosity 9 set for 1 matches in 7 functions for 14 byte clause '9=function-bar' // type=FUNCTION keyword=bar
 #6 T127218 C0 0.000038s   } // cwrap_log_verbosity_set()
 hello world!
 #7 T127218 C0 0.000042s + main() { #1
@@ -116,7 +115,7 @@ hello world!
 Notice how `CWRAP_PRINTF()` output gets auto indented if running with cwrap verbosity enabled:
 ```
 $ CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=1 CWRAP_LOG_VERBOSITY_SET=1 ./foo
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}~<keyword>][:...]) _STATS=0 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _STATS=0 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
 #1 T127544 C0 0.000000s + cwrap_log_verbosity_set(verbosity=1) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
 #2 T127544 C0 0.000011s   - verbosity 1 set for 7 matches in 7 functions for 1 byte clause '1' // type=FILE|FUNCTION keyword=(null)
 #3 T127544 C0 0.000027s   } // cwrap_log_verbosity_set()
@@ -132,10 +131,10 @@ cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}
 If verbosity only enabled for `main()` then `CWRAP_PRINTF()` 'demoted' to a regular `printf()`:
 Note: The run-time per function verbosity applies to cwrap macros as well as auto entry and exit instrumentation.
 ```
-$ CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=1 CWRAP_LOG_VERBOSITY_SET=1=function~main ./foo
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1=function~main (<verbosity>[={file|function}~<keyword>][:...]) _STATS=0 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
-#1 T127664 C0 0.000000s + cwrap_log_verbosity_set(verbosity=1=function~main) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
-#2 T127664 C0 0.000013s   - verbosity 1 set for 1 matches in 7 functions for 15 byte clause '1=function~main' // type=FUNCTION keyword=main
+$ CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_CURT=1 CWRAP_LOG_VERBOSITY_SET=1=function-main ./foo
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1=function-main (<verbosity>[={file|function}-<keyword>][/...]) _STATS=0 _SHOW=0 _CURT=1 _FILE=0 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWIND=0 _ON_VALGRIND=0 _QUIET_UNTIL=(null)
+#1 T127664 C0 0.000000s + cwrap_log_verbosity_set(verbosity=1=function-main) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
+#2 T127664 C0 0.000013s   - verbosity 1 set for 1 matches in 7 functions for 15 byte clause '1=function-main' // type=FUNCTION keyword=main
 #3 T127664 C0 0.000023s   } // cwrap_log_verbosity_set()
 hello world!
 #4 T127664 C0 0.000027s + main(argc=1) {} = 2 // #1
@@ -153,10 +152,10 @@ Environment variables which influence cwrap at run-time
 - `CWRAP_LOG_CURT=1`: Allow function entry and exit output lines to be folded together where possible.
 - `CWRAP_LOG_FILE=1`: Output to file instead of stdout.
 - `CWRAP_LOG_QUIET_UNTIL=<function>`: Ignore verbosity until function has been called.
-- `CWRAP_LOG_VERBOSITY_SET=<verbosity>[={file|function}~<keyword>][:...]`: Set function verbosity [1].
+- `CWRAP_LOG_VERBOSITY_SET=<verbosity>[={file|function}-<keyword>][/...]`: Set function verbosity [1].
 - `CWRAP_LOG_SHOW=1`: List all instrumented functions and exit.
 
-[1] Note: `cwrap_log_verbosity_set("<verbosity>[={file|function}~<keyword>][:...]")` works at run-time too.
+[1] Note: `cwrap_log_verbosity_set("<verbosity>[={file|function}-<keyword>][/...]")` works at run-time too.
 
 How to build and test cwrap?
 --------------------------
