@@ -386,6 +386,8 @@ sub demangle_name_sanitize_type_order {
     $demangled_name =~ s~(char|short|int|long|float|double) (unsigned|signed)~$2 $1~g; # todo: figure out a better way to order types
     while ($demangled_name =~ s~(unsigned|signed|char|short|int|long|float|double) const~const $1~g) {} # todo: figure out a better way to order types
     $demangled_name =~ s~(long) int\s*~$1~g; # 'long int' same as 'long'; see: https://stackoverflow.com/questions/17287957/is-long-unsigned-as-valid-as-unsigned-long-in-c
+
+    $demangled_name =~ s~u_char~unsigned char~g; # hack for e.g. const u_char * --> const unsigned char*
     return $demangled_name;
 }
 
@@ -574,6 +576,8 @@ sub read_modify_rewrite_assembler_file {
     my $h_labels_to_rewrite;
     my $h_mangled_2_demangled;
     my $h_demangled_2_mangled;
+    my $h_demangled_2_mangled_no_params;
+    my $h_demangled_2_mangled_unique;
 
     my $t1 = Time::HiRes::time();
     my @s_file_line_index_start = indexes { m~\s+\.type\s+([^,]+),\s*\@function~ } @s_file_lines; # e.g. .type   next_entry, @function
@@ -641,9 +645,13 @@ sub read_modify_rewrite_assembler_file {
             }
 
             if (not exists $h_mangled_2_demangled->{$mangled_name}) {
-                my $demangled_name = demangle_name($mangled_name);
-                $h_mangled_2_demangled->{$mangled_name  } = $demangled_name;
-                $h_demangled_2_mangled->{$demangled_name} =   $mangled_name;
+                my $demangled_name           = demangle_name($mangled_name);
+                my $demangled_name_no_params = $demangled_name;
+                   $demangled_name_no_params =~ s~\(.*$~~; # strip (<params>) from e.g. main()
+                $h_mangled_2_demangled->{$mangled_name  }                     = $demangled_name;
+                $h_demangled_2_mangled->{$demangled_name}                     =   $mangled_name;
+                $h_demangled_2_mangled_no_params->{$demangled_name_no_params} =   $mangled_name;
+                $h_demangled_2_mangled_unique->{$demangled_name_no_params} ++;
             }
 
             $s_file_lines[$a + $p] .= sprintf qq[ # <-- rdi=&%s, rsi=&cwrap_data_%s], $mangled_name, $mangled_name;
@@ -672,145 +680,6 @@ EOF
 
             $log .= sprintf qq[%f     - cwrap: assembler file: line %d: %s%s\n], Time::HiRes::time() - $ts, $a + $p, pretty_asm($original_enter_exit_call), $note if($debug_search);
         } # foreach my $p
-    } # foreach my $i
-
-if(0) {
-    my $t1 = Time::HiRes::time();
-    my @s_file_line_index = indexes { m~(call|jmp)\s+__cyg_profile_func_(enter|exit)~ } @s_file_lines; # (call|jmp) __cyg_profile_func_exit
-    my $t2 = Time::HiRes::time();
-    $log .= sprintf qq[%f - cwrap: found __cyg_profile_func_(enter|exit}() calls: %d in %fs\n], Time::HiRes::time() - $ts, scalar @s_file_line_index, $t2 - $t1;
-
-    my $enable_munge_cyg_profile_func = 1;
-    if (0) {
-        $log .= sprintf qq[%f   - cwrap: NOTE: disabling munging __cyg_profile_func_(enter|exit}() calls\n], Time::HiRes::time() - $ts;
-        $enable_munge_cyg_profile_func = 0;
-    }
-
-    #moved above my $h_labels_to_rewrite;
-    #moved above my $h_mangled_2_demangled;
-    #moved above my $h_demangled_2_mangled;
-    foreach my $i (@s_file_line_index) {
-        my ($type) = $s_file_lines[$i -0] =~ m~__cyg_profile_func_(enter|exit)~;
-        $log .= sprintf qq[%f   - cwrap: starting at line %d: %s\n], Time::HiRes::time() - $ts, $i, pretty_asm($s_file_lines[$i -0]) if($debug_search);
-        cwrap_die(sprintf qq[%f ERROR: cwrap: cannot determine enter or exit type!\n], Time::HiRes::time() - $ts) if (not defined $type);
-        my $instruction;
-        my $mangled_name;
-        my $mangled_name_line;
-        my $mangled_name_rest;
-        my $label_to_find = "";
-        my $considering_labels = 0;
-        my $register = "\%rdi"; # rdi is Linux calling convention parameter #1; https://en.wikipedia.org/wiki/X86_calling_conventions#System_V_AMD64_ABI
-        my $lines_back = 1;
-        do {
-            if (($label_to_find eq "") && $s_file_lines[$i -$lines_back] =~ m~(leaq|movq)\s+cwrap_data_([_A-Za-z0-9\.]+)(.*),.*$register~) {
-                $log .= sprintf qq[%f   - cwrap: found %s at %d lines back: %s <-- already instrumented!\n], Time::HiRes::time() - $ts, $register, $lines_back, pretty_asm($s_file_lines[$i -$lines_back]) if($debug_search);
-                $instruction       = $1;
-                $mangled_name      = $2; # e.g. leaq _ZN3FooD2Ev(%rip), %rdi
-                $mangled_name_rest = $3;
-                $mangled_name_line = -1;
-                goto FOUND_LEAQ;
-            }
-            elsif (($label_to_find eq "") && $s_file_lines[$i -$lines_back] =~ m~(leaq|movq)\s+([_A-Za-z0-9\.]+)(.*),.*$register~) { # e.g. leaq    strip_components(%rip), %rdi
-                $log .= sprintf qq[%f   - cwrap: found %s at %d lines back: %s <-- instrumenting\n], Time::HiRes::time() - $ts, $register, $lines_back, pretty_asm($s_file_lines[$i -$lines_back]) if($debug_search);
-                $instruction       = $1;
-                $mangled_name      = $2; # e.g. leaq _ZN3FooD2Ev(%rip), %rdi
-                $mangled_name_rest = $3;
-                $mangled_name_line = $i - $lines_back;
-                goto FOUND_LEAQ;
-            }
-            elsif (($label_to_find eq "") && $s_file_lines[$i -$lines_back] =~ m~movq\s+(\%[_A-Za-z0-9\.]+).*,.*$register~) { # movq %rbp, %rdi
-                $log .= sprintf qq[%f   - cwrap: found %s at %d lines back: %s\n], Time::HiRes::time() - $ts, $register, $lines_back, pretty_asm($s_file_lines[$i -$lines_back]) if($debug_search);
-                $register = $1;
-            }
-            elsif (($label_to_find eq "") && $s_file_lines[$i -$lines_back] =~ m~^([^\.][_A-Za-z0-9\.]+):\s*$~) { # _Z41__static_initialization_and_destruction_0ii.cold
-                $mangled_name      =  $1;
-                $mangled_name      =~ s~\.cold$~~;
-                $mangled_name_line = undef; # do not rewrite labels!
-                $log .= sprintf qq[%f   - cwrap: found label %d lines back: %s\n], Time::HiRes::time() - $ts, $lines_back, pretty_asm($s_file_lines[$i -$lines_back]) if($debug_search);
-                goto FOUND_LEAQ;
-            }
-            elsif ($considering_labels && ($label_to_find eq "") && $s_file_lines[$i -$lines_back] =~ m~^(\.L\d+):~) { # e.g. .L546:
-                $label_to_find = $1;
-                $log .= sprintf qq[%f   - cwrap: found L label %d lines back: %s\n], Time::HiRes::time() - $ts, $lines_back, pretty_asm($s_file_lines[$i -$lines_back]) if($debug_search);
-            }
-            elsif (($label_to_find ne "") && $s_file_lines[$i -$lines_back] =~ m~\Q$label_to_find\E~) { # e.g. .L546:
-                $label_to_find = "";
-                $considering_labels = 0;
-                $log .= sprintf qq[%f   - cwrap: found L label %d lines back: %s\n], Time::HiRes::time() - $ts, $lines_back, pretty_asm($s_file_lines[$i -$lines_back]) if($debug_search);
-            }
-            elsif (($label_to_find eq "") && $s_file_lines[$i -$lines_back] =~ m~^\s*jmp\s+~) { # e.g. jmp  .L518
-                $log .= sprintf qq[%f   - cwrap: found jmp %d lines back: %s\n], Time::HiRes::time() - $ts, $lines_back, pretty_asm($s_file_lines[$i -$lines_back]) if($debug_search);
-                cwrap_die(sprintf qq[%f ERROR: internal: cwrap: finding a jmp means something likely went wrong searching for the enter or exit label\n], Time::HiRes::time() - $ts, 1 + $i);
-            }
-
-            $lines_back ++;
-        } while ($lines_back < $i);
-        cwrap_die(sprintf qq[%f ERROR: internal: cwrap: cannot find leaq/movq instruction in assembler file before line %d!\n], Time::HiRes::time() - $ts, 1 + $i);
-
-        FOUND_LEAQ:;
-
-        if ($mangled_name =~ m~^\d~) {
-            cwrap_die(sprintf qq[%f ERROR: internal: cwrap: found leaq/movq instruction in assembler file before line %d but mangled name begins with a digit: %s()!\n], Time::HiRes::time() - $ts, 1 + $i, $mangled_name);
-        }
-
-        my $note;
-        if ($mangled_name =~ m~\.~) {
-            # note: unbelievably, some labels can have dots in them, e.g.: _GLOBAL__sub_I_cpp_example_1.b.cpp <-- bug in gcc ?
-            my $mangled_name_with_dot = $mangled_name;
-            my $mangled_name_no___dot = $mangled_name;
-               $mangled_name_no___dot =~ s~\.~_~g;
-            $h_labels_to_rewrite->{$mangled_name_with_dot} = $mangled_name_no___dot;
-            $note = " (converted dots to underscores)";
-        }
-
-        if (not exists $h_mangled_2_demangled->{$mangled_name}) {
-            my $demangled_name = demangle_name($mangled_name);
-            $h_mangled_2_demangled->{$mangled_name  } = $demangled_name;
-            $h_demangled_2_mangled->{$demangled_name} =   $mangled_name;
-        }
-
-        # change original leaq or movq from foo() to cwrap_data_foo()
-        my $fpic;
-        my $fpic_note;
-        if ($mangled_name_rest !~ m~GOTPCREL~i) {
-            $fpic      = '@GOTPCREL';
-            $fpic_note = ' (append GOTPCREL)';
-        }
-        $log .= sprintf qq[%f   - cwrap: line %d: %-5s %s AKA %s demangled%s%s%s\n], Time::HiRes::time() - $ts, $i, $type, $mangled_name, $h_mangled_2_demangled->{$mangled_name}, ($mangled_name_line >= 0) ? "" : " (via $register register!)", $note, $fpic_note;
-        $log .= sprintf qq[%f   - cwrap:\n], Time::HiRes::time() - $ts if($debug_search);
-        if ($mangled_name_line >= 0) {
-            if ($enable_munge_cyg_profile_func) {
-                if    ($instruction eq 'leaq') { $s_file_lines[$mangled_name_line] =~ s~leaq(\s+)($mangled_name)~movq$1cwrap_data_$2$fpic~; }
-                elsif ($instruction eq 'movq') { $s_file_lines[$mangled_name_line] =~ s~movq(\s+)($mangled_name)~movq$1cwrap_data_$2$fpic~; }
-                else {
-                    # come here if e.g. no leaq / movq but instead .cold label found? so do nothing...
-                }
-            }
-        }
-
-        # use edx below because call __cyg_profile_func_(enter|exit) only uses 2 parameters, RDI & RSI, therefore use 3rd parameter RDX for comparison; see https://en.wikipedia.org/wiki/X86_calling_conventions#System_V_AMD64_ABI
-        my $skip_label = sprintf qq[.L_cwrap_skip_%s_%d], "cyg_profile_func", $i;
-        my $save_call = $s_file_lines[$i];
-        # todo: consider eliminating cwrap_log_verbosity and just testing cwrap_data_$mangled_name as zero or non-zero? faster?
-        # non -fPIC code: movl  cwrap_data_$mangled_name(%rip), %edx
-        # non -fPIC code: cmpl  cwrap_log_verbosity(%rip), %edx
-        # non -fPIC code: jg    $skip_label
-        $s_file_lines[$i] = <<EOF;
-
-    movq    cwrap_log_verbosity\@GOTPCREL(%rip), %rax
-    movl    (%rax), %edx
-    movq    cwrap_data_$mangled_name\@GOTPCREL(%rip), %rax
-    movl    (%rax), %eax
-    cmpl    %eax, %edx
-    jl  $skip_label
-EOF
-        $s_file_lines[$i] .= sprintf qq[%s\n], $save_call; # original call to __cyg_profile_func_(enter|exit)
-        $s_file_lines[$i] .= sprintf qq[%s:\n], $skip_label;
-        if($save_call =~ m~jmp~) {
-            $s_file_lines[$i] .= sprintf qq[\tret\n];
-        }
-        $s_file_lines[$i] .= sprintf qq[\n];
-} # fixme
     } # foreach my $i
 
     #
@@ -857,6 +726,7 @@ EOF
 
     my $s_file_line  = join("\n", @s_file_lines);
 
+	my $unique_dummies_found;
     foreach my $i (@s_file_line_index) {
         my ($line, $label) = $s_file_lines[$i -0] =~ m~pushsection __cwrap.*\.int (\d+); \.asciz "\$([^"]+)"~;
         my ($pretty_function) = $s_file_line =~ m~$label\:\s+\.string\s+"([^"]+)"~s;
@@ -879,25 +749,60 @@ EOF
         $demangled = demangle_name_sanitize_type_order($demangled);
         $log .= sprintf qq[%f   - cwrap: demangled=%s <-- after type sanitization\n], Time::HiRes::time() - $ts, $demangled if($debug_search);
         if (not exists $h_demangled_2_mangled->{$demangled}) {
+            # example $demangled: BroFunc::Call(val_list*, Frame*) const
+            # example in hash   : BroFunc::Call(List<Val*>*, Frame*) const
             $log .= sprintf qq[%f   - cwrap: removing parameters (...) because cannot find demangled function: %s\n], Time::HiRes::time() - $ts, $demangled;
             $demangled =~ s~\(.*$~~; # strip (<params>) from e.g. int main()
         }
-        if (not exists $h_demangled_2_mangled->{$demangled}) {
+
+        my $mangled;
+        if (exists $h_demangled_2_mangled->{$demangled}) {
+            # come here if found demangled name with parameters
+            $mangled = $h_demangled_2_mangled->{$demangled};
+        }
+        elsif ((exists $h_demangled_2_mangled_unique->{$demangled})
+        &&     (1 ==   $h_demangled_2_mangled_unique->{$demangled})) {
+            # come here if found demangled name without parameters and only one such name exists
+            $mangled = $h_demangled_2_mangled_no_params->{$demangled};
+        }
+        else {
+            # come here if failed to find demangled name
             foreach my $demangled_key (sort keys %{$h_demangled_2_mangled}) {
                 $log .= sprintf qq[%f   - cwrap: non-matching demangled key: %d bytes: %s\n], Time::HiRes::time() - $ts, length($demangled_key), $demangled_key;
             }
             cwrap_die(sprintf qq[%f ERROR: cwrap: cannot find mangled function via demangled function: %s // via pretty function %s\n], Time::HiRes::time() - $ts, $demangled, $pretty_function);
         }
-        my $mangled = $h_demangled_2_mangled->{$demangled};
 
         $log .= sprintf qq[%f   - cwrap: starting at line %d: %s; line=%d label=%s pretty_function=%s AKA %s mangled\n], Time::HiRes::time() - $ts, $i, pretty_asm($s_file_lines[$i -0]), $line, $label, $pretty_function, $mangled if($debug_search);
 
         my $unique_dummy = sprintf qq[cwrap_data_verbosity_dummy_%u], $line;
-        if ($s_file_line =~ s~$unique_dummy~cwrap_data_$mangled~) {
+        if ($s_file_line =~ s~(\s+)[^\s\n\r]*$unique_dummy[^\s\n\r\@\,]*([\@\,])~$1cwrap_data_$mangled$2~) {
             # e.g. movq cwrap_data_verbosity_dummy_8@GOTPCREL(%rip), %rax
+            # e.g. movq _ZN3Bro28cwrap_data_verbosity_dummy_0E@GOTPCREL(%rip), %rax
+            $unique_dummies_found->{$unique_dummy} ++;
         }
         else {
-            cwrap_die(sprintf qq[%f ERROR: internal: cwrap: cannot find %s in assembler file referenced by line %d!\n], Time::HiRes::time() - $ts, $unique_dummy, $i);
+            if (not exists $unique_dummies_found->{$unique_dummy}) {
+                # come here if no dummy references for this pushsection ever found
+                # note: if there is a pushsection then there need to be at least 1 dummy refenence!
+                my $short_s_file = $s_file;
+                   $short_s_file =~ s~^.*/~~;
+                cwrap_die(sprintf qq[%f ERROR: internal: cwrap: cannot find %s in assembler file %s referenced by line %d!\n], Time::HiRes::time() - $ts, $unique_dummy, $short_s_file, $i);
+            }
+            else {
+                # note: sometimes there are more pushsections then dummy references, e.g.:
+                #
+                # c---example-1.a.s:40: .pushsection __cwrap, "S", @note; .int 4; .asciz "$__PRETTY_FUNCTION__.3212"; .popsection
+                # c---example-1.a.s:637: .pushsection __cwrap, "S", @note; .int 4; .asciz "$__PRETTY_FUNCTION__.3212"; .popsection
+                # c---example-1.a.s:1023: .pushsection __cwrap, "S", @note; .int 4; .asciz "$__PRETTY_FUNCTION__.3212"; .popsection
+                # c---example-1.a.s:1138: .pushsection __cwrap, "S", @note; .int 4; .asciz "$__PRETTY_FUNCTION__.3212"; .popsection
+                #
+                # c---example-1.a.s:46: movq	cwrap_data_verbosity_dummy_4@GOTPCREL(%rip), %rax
+                # c---example-1.a.s:643: movq	cwrap_data_verbosity_dummy_4@GOTPCREL(%rip), %rax
+                # c---example-1.a.s:1007: movq	cwrap_data_verbosity_dummy_4@GOTPCREL(%rip), %r14
+                #
+                # c---example-1.a.s:4576: .string	"cwrap_data_verbosity_dummy_4"
+            }
         }
     } # foreach my $i
 
@@ -914,11 +819,7 @@ EOF
         }
     }
 
-    $s_file_line =~ s~\.string\s+"cwrap_data_verbosity_dummy_\d+"~~gm; # .string "cwrap_data_verbosity_dummy_10"
-
-    if ($s_file_line =~ m~(cwrap_data_verbosity_dummy_\d+)~s) {
-        cwrap_die(sprintf qq[%f ERROR: internal: cwrap: detected at least one unsubstituted temporary label: %s!\n], Time::HiRes::time() - $ts, $1);
-    }
+    $s_file_line =~ s~(\.string\s+)"[^ \n\r]*cwrap_data_verbosity_dummy_\d+[^ \n\r]*"~#$1 <-- cwrap string was here!~gs; # .string "cwrap_data_verbosity_dummy_10" or .string "_ZN3Bro28cwrap_data_verbosity_dummy_10E"
 
     #
     # write out modified assembler file
@@ -930,6 +831,10 @@ EOF
     $s_file_line .= "\n";
     syswrite($out, $s_file_line, length($s_file_line));
     close $out;
+
+    if ($s_file_line =~ m~(cwrap_data_verbosity_dummy_\d+)~s) {
+        cwrap_die(sprintf qq[%f ERROR: internal: cwrap: detected at least one unsubstituted temporary label: %s!\n], Time::HiRes::time() - $ts, $1);
+    }
 } # read_modify_rewrite_assembler_file()
 
 sub using_undefind_error_write_cwrap_c {
@@ -1400,12 +1305,15 @@ unw_word_t    cwrap_function_addr_start                 = 0;
 // fixme: todo: add asserts
 // fixme: todo: add multiple dests
 char * cwrap_log_dump_hex(const void * pointer, int len, int len_max) { // show max len_max bytes of len bytes @ pointer
-    const char * data = (const char *) pointer;
+    if (0 == len) {
+        return "n/a";
+    }
+    const unsigned char * data = (const unsigned char *) pointer;
     int truncated  = len_max < len ? 2   : 0      ;
     int len_to_use = len < len_max ? len : len_max;
     cwrap_log_dump_hex_buffer[0] = '"';
     for (int x = 0; x < len_to_use; x++) {
-        cwrap_log_dump_hex_buffer[1 + x] = ((data[x] < 32) || (data[x] > 127)) ? '.' : data[x];
+        cwrap_log_dump_hex_buffer[1 + x] = ((data[x] < 32) || (data[x] >= 127)) ? '.' : data[x];
     }
     if (truncated) {
 		cwrap_log_dump_hex_buffer[1 + len_to_use + 0] = '.';
@@ -1415,14 +1323,19 @@ char * cwrap_log_dump_hex(const void * pointer, int len, int len_max) { // show 
     cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 1] = '=';
     cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 2] = '0';
     cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 3] = 'x';
+    int hex_pad = 0;
     for (int x = 0; x < len_to_use; x++) {
-        sprintf(&cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (x * 2)], "%%02x", data[x]);
+        if ((x > 0) && (0 == (x % 4))) {
+            cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (x * 2) + hex_pad] = '-';
+            hex_pad ++;
+        }
+        sprintf(&cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (x * 2) + hex_pad], "%%02x", data[x]);
     }
     if (truncated) {
-		cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (len_to_use * 2) + 0] = '.';
-		cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (len_to_use * 2) + 1] = '.';
+		cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (len_to_use * 2) + hex_pad + 0] = '.';
+		cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (len_to_use * 2) + hex_pad + 1] = '.';
 	}
-    cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (len_to_use * 2) + 2] = 0;
+    cwrap_log_dump_hex_buffer[1 + len_to_use + truncated + 4 + (len_to_use * 2) + hex_pad + truncated] = 0;
     return cwrap_log_dump_hex_buffer;
 }
 
