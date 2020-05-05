@@ -212,7 +212,7 @@ $ llvm-cxxfilt _ZNSt11_Tuple_implILm6EJN3caf18trivial_match_caseIZN6broker10core
 30,183
 ```
 
-Running cwrap instrumented `zeek --help`
+Running cwrap auto instrumented `zeek --help`
 -----------
 How many functions does Zeek embedded cwrap say are instrumented at run-time:
 ```
@@ -322,7 +322,7 @@ $ cat cwrap.out | egrep "zeekenv"
 #79368 T13115 C0   - 7 calls to 1 of 1 function variation for zeekenv()
 ```
 
-Running cwrap instrumented `zeek hello.zeek`
+Running cwrap auto instrumented `zeek hello.zeek`
 -----------
 Set up the environment for freshly built Zeek, create `hello.zeek` script file, and run without cwrap verbosity enabled:
 ```
@@ -546,3 +546,129 @@ $ cat cwrap.out | egrep "calls to .* function variation" | perl -lane 'm~([\d\,]
 #878487 T75797 C0   - 669,268 calls to 1 of 1 function variation(s) for BroType::Tag()
 ```
 
+
+
+
+
+Running cwrap auto and manual instrumented `zeek` with pcap
+-----------
+
+Grab example pcap file and create a Zeek seed:
+```
+$ # cd build/ ; chmod +x zeek-path-dev.sh ; source ./zeek-path-dev.sh
+
+$ wget https://s3.amazonaws.com/tcpreplay-pcap-files/smallFlows.pcap
+
+$ zeek --save-seeds any-non-changing-seed.txt --print-plugins | tail
+Zeek::SteppingStone - Stepping stone analyzer (built-in)
+Zeek::Syslog - Syslog analyzer UDP-only (built-in)
+Zeek::TCP - TCP analyzer (built-in)
+Zeek::Teredo - Teredo analyzer (built-in)
+Zeek::UDP - UDP Analyzer (built-in)
+Zeek::Unified2 - Analyze Unified2 alert files. (built-in)
+Zeek::VXLAN - VXLAN analyzer (built-in)
+Zeek::X509 - X509 and OCSP analyzer (built-in)
+Zeek::XMPP - XMPP analyzer (StartTLS only) (built-in)
+Zeek::ZIP - Generic ZIP support analyzer (built-in)
+
+$ wc -l any-non-changing-seed.txt
+21 any-non-changing-seed.txt
+```
+
+Add manual instrumentation to `internal_md5()` function and recompile Zeek:
+```
+$ cp ../../cwrap/if-no-cwrap.h ../src/.
+
+$ git diff ../src/digest.h
+diff --git a/src/digest.h b/src/digest.h
+index 629ebc0ac..90f146b90 100644
+--- a/src/digest.h
++++ b/src/digest.h
+@@ -6,6 +6,8 @@
+
+ #pragma once
+
++#include "if-no-cwrap.h"
++
+ #include <openssl/md5.h>
+ #include <openssl/sha.h>
+ #include <openssl/evp.h>
+@@ -103,6 +105,7 @@ inline void hash_final(EVP_MD_CTX* c, u_char* md)
+ inline unsigned char* internal_md5(const unsigned char* data, unsigned long len, unsigned char* out)
+        {
+        static unsigned char static_out[MD5_DIGEST_LENGTH];
++       CWRAP_PARAMS("data[%'ld]=%s", len, cwrap_log_dump_hex(data, len, 16 /* max chars to dump */));
+
+        if ( ! out )
+                out = static_out; // use static array for return, see OpenSSL man page
+@@ -110,5 +113,11 @@ inline unsigned char* internal_md5(const unsigned char* data, unsigned long len,
+        EVP_MD_CTX* c = hash_init(Hash_MD5);
+        hash_update(c, data, len);
+        hash_final(c, out);
++
++       CWRAP_APPEND("out=0x%02x%02x%02x%02x-%02x%02x%02x%02x-%02x%02x%02x%02x-%02x%02x%02x%02x",
++               out[ 0], out[ 1], out[ 2], out[ 3],
++               out[ 4], out[ 5], out[ 6], out[ 7],
++               out[ 8], out[ 9], out[10], out[11],
++               out[12], out[13], out[14], out[15]);
+        return out;
+        }
+```
+
+Run `zeek` while `tcpreplay`ing only 10 packets via `lo`:
+```
+$ time sudo bash -v -x -s << 'EOF' 2>&1 $(: note: only bash has working jobs -p)
+chmod +x zeek-path-dev.sh ; source ./zeek-path-dev.sh ; which zeek
+export ZEEK_RUN_FOLDER=run-zeek ; rm -rf $ZEEK_RUN_FOLDER ; mkdir -p $ZEEK_RUN_FOLDER ; pushd $ZEEK_RUN_FOLDER
+CWRAP_LOG_VERBOSITY_SET='1=function-internal_md5/1=function-net_run' CWRAP_LOG_QUIET_UNTIL=net_run CWRAP_LOG_STATS=1 CWRAP_LOG_NUM=1 CWRAP_LOG_THREAD_ID=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_FILE=1 CWRAP_LOG_CURT=1 zeek --load-seeds ../any-non-changing-seed.txt --iface lo > timestamp-zeek.log 2>&1 &
+BASH_PROCESS_GROUP_PIDS=`jobs -p | perl -lane 'push @a, $_; sub END{ printf qq[@a]; }'`
+sleep 1
+tcpreplay -i lo --pps=100000 --stats=1 --limit 10 --preload-pcap ../smallFlows.pcap
+sleep 1
+kill -INT $BASH_PROCESS_GROUP_PIDS ; wait $BASH_PROCESS_GROUP_PIDS
+find . -type f | egrep timestamp | xargs sort
+EOF
+```
+
+Zeek generated the following log files:
+```
+$ find run-zeek/ -type f | egrep "\.log" | egrep -v timestamp | xargs wc -l
+  10 run-zeek/packet_filter.log
+  10 run-zeek/files.log
+  11 run-zeek/conn.log
+  10 run-zeek/http.log
+  11 run-zeek/reporter.log
+```
+
+Show `cwrap.out` and be surprised that only 10 packets causes 683 calls to `internal_md5()`:
+```
+$ cat run-zeek/cwrap.out
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1=function-internal_md5/1=function-net_run (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=net_run _STATS=1 _SHOW=0 _CURT=1 _FILE=1 _NUM=1 _COR_ID=1 _THREAD_ID=1 _STACK_PTR=0 _TIMESTAMP=1 _UNWI
+#1 T97357 C0 0.000076s + cwrap_log_verbosity_set(verbosity=1=function-internal_md5/1=function-net_run) { // #1 [cwrap_log_verbosity_set() ignores verbosity!]
+#2 T97357 C0 0.003229s   - verbosity 1 set for 1 matches in 109,535 functions for 23 byte clause '1=function-internal_md5' // type=FUNCTION keyword=internal_md5
+#3 T97357 C0 0.003244s   - verbosity 1 set for 1 matches in 109,535 functions for 18 byte clause '1=function-net_run' // type=FUNCTION keyword=net_run
+#4 T97357 C0 0.003247s   } // cwrap_log_verbosity_set()
+#5 T97357 C0 0.003250s + cwrap_log_quiet_until(name=net_run) {} // #1 going quiet until function net_run() [cwrap_log_quiet_until() ignores verbosity!]
+#6 T97357 C0 0.603293s + net_run() { // #1
+#7 T97357 C0 0.991514s   + internal_md5(data[7]="43178&."=0x34333137382600) {} // #1 out=0x14b947d1-48dae184-17d1947d-b40c54ee
+#8 T97357 C0 0.991700s   + internal_md5(data[799]="44178&54178&6617.."=0x34343137382635343137382636363137..) {} // #2 out=0x5c9f1f70-d63e5892-fec32221-c56e03b0
+#9 T97357 C0 0.991777s   + internal_md5(data[169]="99578&30678&4367.."=0x39393537382633303637382634333637..) {} // #3 out=0x26ff74f1-e679192d-9b1b5652-99e5e948
+#10 T97357 C0 0.991805s   + internal_md5(data[181]="99578&30678&6367.."=0x39393537382633303637382636333637..) {} // #4 out=0x74b27efd-da5049fd-6b427862-c2f7dfce
+...
+#687 T97357 C0 1.003296s   + internal_md5(data[7]="31078&."=0x33313037382600) {} // #681 out=0x1fbf1396-23c61cd1-1719c936-aeecbefc
+#688 T97357 C0 1.003306s   + internal_md5(data[7]="41078&."=0x34313037382600) {} // #682 out=0x020cd453-6e2aed49-fa38390d-1b8a58eb
+#689 T97357 C0 2.022734s   + internal_md5(data[107]="Analyzer::ANALYZ.."=0x416e616c797a65723a3a414e414c595a..) {} // #683 out=0xc071b11f-d91475a1-a8b9b985-13237700
+#690 T97357 C0 2.122467s + cwrap_log_stats() { // #1 [cwrap_log_stats() ignores verbosity!]
+#691 T97357 C0 2.122476s   - 1 calls to 1 of 1 function variation(s) for cwrap_log_stats()
+#692 T97357 C0 2.122502s   - 1 calls to 1 of 1 function variation(s) for cwrap_log_verbosity_set()
+#693 T97357 C0 2.122504s   - 1 calls to 1 of 1 function variation(s) for cwrap_log_quiet_until()
+#694 T97357 C0 2.124048s   - 1 calls to 1 of 1 function variation(s) for net_run()
+#695 T97357 C0 2.124065s   - 683 calls to 1 of 1 function variation(s) for internal_md5()
+#696 T97357 C0 2.124073s   } // cwrap_log_stats()
+```
+
+A total of 658 of the 683 MD5s are unique:
+```
+$ cat run-zeek/cwrap.out | perl -lane 'if(m~out=0x(.*)~){ $h->{$1}++; } sub END{ printf qq[- found %u unique MD5s\n], scalar keys %{$h}; }'
+- found 658 unique MD5s
+```
