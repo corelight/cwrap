@@ -1,5 +1,6 @@
 How to cwrap Zeek
 =========================
+
 Example of how a newbie can cwrap auto instrument the Zeek codebase to learn more about it.
 
 Cloning and compiling
@@ -546,10 +547,6 @@ $ cat cwrap.out | egrep "calls to .* function variation" | perl -lane 'm~([\d\,]
 #878487 T75797 C0   - 669,268 calls to 1 of 1 function variation(s) for BroType::Tag()
 ```
 
-
-
-
-
 Running cwrap auto and manual instrumented `zeek` with pcap
 -----------
 
@@ -577,7 +574,6 @@ $ wc -l any-non-changing-seed.txt
 
 Add manual instrumentation to `internal_md5()` function and recompile Zeek:
 ```
-$ git diff
 diff --git a/src/EventHandler.cc b/src/EventHandler.cc
 index 9928df9a8..248324b5f 100644
 --- a/src/EventHandler.cc
@@ -591,10 +587,10 @@ index 9928df9a8..248324b5f 100644
 @@ -63,6 +65,7 @@ void EventHandler::SetLocalHandler(Func* f)
 
  void EventHandler::Call(val_list* vl, bool no_remote)
-        {
-+       CWRAP_APPEND("name=%s()", Name());
+ 	{
++	CWRAP_APPEND("name=%s()", Name());
  #ifdef PROFILE_BRO_FUNCTIONS
-        DEBUG_MSG("Event: %s\n", Name());
+ 	DEBUG_MSG("Event: %s\n", Name());
  #endif
 diff --git a/src/Func.cc b/src/Func.cc
 index e13799b5b..9a258823a 100644
@@ -611,21 +607,21 @@ index e13799b5b..9a258823a 100644
 @@ -306,6 +308,7 @@ int BroFunc::IsPure() const
 
  Val* BroFunc::Call(val_list* args, Frame* parent) const
-        {
-+       CWRAP_APPEND("name=%s()", Name());
+ 	{
++	CWRAP_APPEND("name=%s()", Name());
  #ifdef PROFILE_BRO_FUNCTIONS
-        DEBUG_MSG("Function: %s\n", Name());
+ 	DEBUG_MSG("Function: %s\n", Name());
  #endif
 @@ -628,6 +631,7 @@ int BuiltinFunc::IsPure() const
 
  Val* BuiltinFunc::Call(val_list* args, Frame* parent) const
-        {
-+       CWRAP_APPEND("name=%s()", Name());
+ 	{
++	CWRAP_APPEND("name=%s()", Name());
  #ifdef PROFILE_BRO_FUNCTIONS
-        DEBUG_MSG("Function: %s\n", Name());
+ 	DEBUG_MSG("Function: %s\n", Name());
  #endif
 diff --git a/src/RuleMatcher.cc b/src/RuleMatcher.cc
-index d6cdae8bd..902512afd 100644
+index d6cdae8bd..630bbef96 100644
 --- a/src/RuleMatcher.cc
 +++ b/src/RuleMatcher.cc
 @@ -1,3 +1,4 @@
@@ -633,15 +629,24 @@ index d6cdae8bd..902512afd 100644
 
  #include "zeek-config.h"
  #include "RuleMatcher.h"
-@@ -842,6 +843,8 @@ void RuleMatcher::Match(RuleEndpointState* state, Rule::PatternType type,
-                        const u_char* data, int data_len,
-                        bool bol, bool eol, bool clear)
-        {
-+       CWRAP_PARAMS("data[%'ld]=%s", data_len, cwrap_log_dump_hex(data, data_len, 16 /* max chars to dump */));
-+       CWRAP_APPEND("matching %s rules [%d,%d]", Rule::TypeToString(type), bol, eol);
-        if ( ! state )
-                {
-                reporter->Warning("RuleEndpointState not initialized yet.");
+@@ -649,6 +650,8 @@ RuleMatcher::MIME_Matches* RuleMatcher::Match(RuleFileMagicState* state,
+                                               const u_char* data, uint64_t len,
+                                               MIME_Matches* rval) const
+ 	{
++	CWRAP_PARAMS("data[%'ld]=%s", len, cwrap_log_dump_hex(data, len, 16 /* max chars to dump */));
++	CWRAP_APPEND("matching %s rules", Rule::TypeToString(Rule::FILE_MAGIC));
+ 	if ( ! rval )
+ 		rval = new MIME_Matches();
+
+@@ -842,6 +845,8 @@ void RuleMatcher::Match(RuleEndpointState* state, Rule::PatternType type,
+ 			const u_char* data, int data_len,
+ 			bool bol, bool eol, bool clear)
+ 	{
++	CWRAP_PARAMS("data[%'ld]=%s", data_len, cwrap_log_dump_hex(data, data_len, 16 /* max chars to dump */));
++	CWRAP_APPEND("matching %s rules [%d,%d]", Rule::TypeToString(type), bol, eol);
+ 	if ( ! state )
+ 		{
+ 		reporter->Warning("RuleEndpointState not initialized yet.");
 diff --git a/src/UID.cc b/src/UID.cc
 index 73d61873b..365014774 100644
 --- a/src/UID.cc
@@ -657,27 +662,27 @@ index 73d61873b..365014774 100644
 @@ -11,6 +13,7 @@ using namespace std;
 
  void UID::Set(bro_uint_t bits, const uint64_t* v, size_t n)
-        {
-+       CWRAP_PARAMS("bits=%d/%d n=%ld", bits, BRO_UID_LEN * 64, n);
-        initialized = true;
+ 	{
++	CWRAP_PARAMS("bits=%d/%d n=%ld", bits, BRO_UID_LEN * 64, n);
+ 	initialized = true;
 
-        for ( size_t i = 0; i < BRO_UID_LEN; ++i )
+ 	for ( size_t i = 0; i < BRO_UID_LEN; ++i )
 @@ -27,6 +30,8 @@ void UID::Set(bro_uint_t bits, const uint64_t* v, size_t n)
 
-        if ( res.rem )
-                uid[0] >>= 64 - res.rem;
+ 	if ( res.rem )
+ 		uid[0] >>= 64 - res.rem;
 +
-+       CWRAP_APPEND("uid[%'ld bits]=%s", bits, cwrap_log_dump_hex(&uid[0], BRO_UID_LEN * 64 / 8, BRO_UID_LEN * 64 / 8 /* max chars to dump */));
-        }
++	CWRAP_APPEND("uid[%'ld bits]=%s", bits, cwrap_log_dump_hex(&uid[0], BRO_UID_LEN * 64 / 8, BRO_UID_LEN * 64 / 8 /* max chars to dump */));
+ 	}
 
  std::string UID::Base62(std::string prefix) const
 @@ -38,5 +43,6 @@ std::string UID::Base62(std::string prefix) const
-        for ( size_t i = 0; i < BRO_UID_LEN; ++i )
-                prefix.append(uitoa_n(uid[i], tmp, sizeof(tmp), 62));
+ 	for ( size_t i = 0; i < BRO_UID_LEN; ++i )
+ 		prefix.append(uitoa_n(uid[i], tmp, sizeof(tmp), 62));
 
-+       CWRAP_APPEND("prefix=%s=%s", cwrap_log_dump_hex(&uid[0], BRO_UID_LEN * 64 / 8, BRO_UID_LEN * 64 / 8 /* max chars to dump */), prefix.c_str());
-        return prefix;
-        }
++	CWRAP_APPEND("prefix=%s=%s", cwrap_log_dump_hex(&uid[0], BRO_UID_LEN * 64 / 8, BRO_UID_LEN * 64 / 8 /* max chars to dump */), prefix.c_str());
+ 	return prefix;
+ 	}
 diff --git a/src/digest.h b/src/digest.h
 index 629ebc0ac..b4fb9960f 100644
 --- a/src/digest.h
@@ -694,19 +699,19 @@ index 629ebc0ac..b4fb9960f 100644
 @@ -102,6 +104,7 @@ inline void hash_final(EVP_MD_CTX* c, u_char* md)
 
  inline unsigned char* internal_md5(const unsigned char* data, unsigned long len, unsigned char* out)
-        {
-+       CWRAP_PARAMS("data[%'ld]=%s", len, cwrap_log_dump_hex(data, len, 16 /* max chars to dump */));
-        static unsigned char static_out[MD5_DIGEST_LENGTH];
+ 	{
++	CWRAP_PARAMS("data[%'ld]=%s", len, cwrap_log_dump_hex(data, len, 16 /* max chars to dump */));
+ 	static unsigned char static_out[MD5_DIGEST_LENGTH];
 
-        if ( ! out )
+ 	if ( ! out )
 @@ -110,5 +113,7 @@ inline unsigned char* internal_md5(const unsigned char* data, unsigned long len,
-        EVP_MD_CTX* c = hash_init(Hash_MD5);
-        hash_update(c, data, len);
-        hash_final(c, out);
+ 	EVP_MD_CTX* c = hash_init(Hash_MD5);
+ 	hash_update(c, data, len);
+ 	hash_final(c, out);
 +
-+       CWRAP_APPEND("out=%s", cwrap_log_dump_hex(&out[0], MD5_DIGEST_LENGTH, MD5_DIGEST_LENGTH /* max chars to dump */));
-        return out;
-        }
++	CWRAP_APPEND("out=%s", cwrap_log_dump_hex(&out[0], MD5_DIGEST_LENGTH, MD5_DIGEST_LENGTH /* max chars to dump */));
+ 	return out;
+ 	}
 
 $ cp ../../cwrap/if-no-cwrap.h ../src/.
 ```
@@ -738,380 +743,379 @@ $ find run-zeek/ -type f | egrep "\.log" | egrep -v timestamp | xargs wc -l
 
 Show `cwrap.out` and be surprised that only 10 packets causes 683 calls to `internal_md5()`:
 ```
-$ cat run-zeek/cwrap.out
 cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1=function-internal_md5/1=function-net_run/1=function-BroFunc::Call/1=function-BuiltinFunc::Call/1=function-RuleMatcher::Match/1=function-UID::Set/1=function-net_packet_dispatch/1=function-UID::Base62 (<ver
-#1 T115152 C0 0.000080s + cwrap_log_verbosity_set(verbosity=1=function-internal_md5/1=function-net_run/1=function-BroFunc::Call/1=function-BuiltinFunc::Call/1=function-RuleMatcher::Match/1=function-UID::Set/1=function-net_packet_dispatch/1=function-UID::B
-#2 T115152 C0 0.009008s   - verbosity 1 set for 1 matches in 109,535 functions for 23 byte clause '1=function-internal_md5' // type=FUNCTION keyword=internal_md5
-#3 T115152 C0 0.009062s   - verbosity 1 set for 1 matches in 109,535 functions for 18 byte clause '1=function-net_run' // type=FUNCTION keyword=net_run
-#4 T115152 C0 0.009064s   - verbosity 1 set for 1 matches in 109,535 functions for 24 byte clause '1=function-BroFunc::Call' // type=FUNCTION keyword=BroFunc::Call
-#5 T115152 C0 0.009066s   - verbosity 1 set for 1 matches in 109,535 functions for 28 byte clause '1=function-BuiltinFunc::Call' // type=FUNCTION keyword=BuiltinFunc::Call
-#6 T115152 C0 0.009068s   - verbosity 1 set for 2 matches in 109,535 functions for 29 byte clause '1=function-RuleMatcher::Match' // type=FUNCTION keyword=RuleMatcher::Match
-#7 T115152 C0 0.009071s   - verbosity 1 set for 1 matches in 109,535 functions for 19 byte clause '1=function-UID::Set' // type=FUNCTION keyword=UID::Set
-#8 T115152 C0 0.009073s   - verbosity 1 set for 1 matches in 109,535 functions for 30 byte clause '1=function-net_packet_dispatch' // type=FUNCTION keyword=net_packet_dispatch
-#9 T115152 C0 0.009075s   - verbosity 1 set for 1 matches in 109,535 functions for 22 byte clause '1=function-UID::Base62' // type=FUNCTION keyword=UID::Base62
-#10 T115152 C0 0.009080s   } // cwrap_log_verbosity_set()
-#11 T115152 C0 0.009085s + cwrap_log_quiet_until(name=net_run) {} // #1 going quiet until function net_run() [cwrap_log_quiet_until() ignores verbosity!]
-#12 T115152 C0 0.677640s + net_run() { // #1
-#13 T115152 C0 0.677923s   + BroFunc::Call() { // #1 name=Broker::log_flush()
-#14 T115152 C0 0.677942s     + BroFunc::Call() { // #2 name=Broker::flush_logs()
-#15 T115152 C0 0.677948s       + BuiltinFunc::Call() {} // #1 name=Broker::__flush_logs()
-#16 T115152 C0 0.677957s       } // BroFunc::Call()
-#17 T115152 C0 0.677961s     } // BroFunc::Call()
-#18 T115152 C0 0.677963s   + BroFunc::Call() { // #3 name=ChecksumOffloading::check()
-#19 T115152 C0 0.677968s     + BuiltinFunc::Call() {} // #2 name=get_net_stats()
-#20 T115152 C0 0.678052s     } // BroFunc::Call()
-#21 T115152 C0 0.678056s   + BroFunc::Call() {} // #4 name=filter_change_tracking()
-#22 T115152 C0 0.678061s   + BroFunc::Call() { // #5 name=net_stats_update()
-#23 T115152 C0 0.678064s     + BuiltinFunc::Call() {} // #3 name=get_net_stats()
-#24 T115152 C0 0.678100s     } // BroFunc::Call()
-#25 T115152 C0 1.015583s   + net_packet_dispatch() { // #1
-#26 T115152 C0 1.016023s     + Bro::UID::Set(bits=96/128 n=0) {} // #1 uid[96 bits]=".h......s]....s."=0xf1681e1e-00000000-735da9f6-f5a173a8
-#27 T115152 C0 1.016065s     + Bro::UID::Base62() {} // #1 prefix=".h......s]....s."=0xf1681e1e-00000000-735da9f6-f5a173a8=C14ecyXevFmAVbFse
-#28 T115152 C0 1.016136s     + RuleMatcher::Match(data[0]=n/a) { // #1 matching Payload rules [1,0]
-#29 T115152 C0 1.016168s       + internal_md5(data[7]="43178&."=0x34333137-382600) {} // #1 out="..G.H......}..T."=0x14b947d1-48dae184-17d1947d-b40c54ee
-#30 T115152 C0 1.016378s       + internal_md5(data[799]="44178&54178&6617.."=0x34343137-38263534-31373826-36363137..) {} // #2 out="\..p.>X..."!.n.."=0x5c9f1f70-d63e5892-fec32221-c56e03b0
-#31 T115152 C0 1.016420s       } // RuleMatcher::Match()
-#32 T115152 C0 1.016424s     + RuleMatcher::Match(data[0]=n/a) {} // #2 matching Payload rules [1,0]
-#33 T115152 C0 1.016458s     + RuleMatcher::Match(data[943]="GET /complete/se.."=0x47455420-2f636f6d-706c6574-652f7365..) { // #3 matching Payload rules [0,0]
-#34 T115152 C0 1.016485s       + internal_md5(data[169]="99578&30678&4367.."=0x39393537-38263330-36373826-34333637..) {} // #3 out="&.t..y.-..VR...H"=0x26ff74f1-e679192d-9b1b5652-99e5e948
-#35 T115152 C0 1.016532s       + internal_md5(data[181]="99578&30678&6367.."=0x39393537-38263330-36373826-36333637..) {} // #4 out="t.~..PI.kBxb...."=0x74b27efd-da5049fd-6b427862-c2f7dfce
-#36 T115152 C0 1.016568s       + internal_md5(data[175]="99578&30678&8367.."=0x39393537-38263330-36373826-38333637..) {} // #5 out=".t.J[...m.z.W..."=0xb574014a-5b94e193-6dd57a04-57d01e1f
+#1 T34671 C0 0.000078s + cwrap_log_verbosity_set(verbosity=1=function-internal_md5/1=function-net_run/1=function-BroFunc::Call/1=function-BuiltinFunc::Call/1=function-RuleMatcher::Match/1=function-UID::Set/1=function-net_packet_dispatch/1=function-UID::Ba
+#2 T34671 C0 0.010346s   - verbosity 1 set for 1 matches in 109,535 functions for 23 byte clause '1=function-internal_md5' // type=FUNCTION keyword=internal_md5
+#3 T34671 C0 0.010369s   - verbosity 1 set for 1 matches in 109,535 functions for 18 byte clause '1=function-net_run' // type=FUNCTION keyword=net_run
+#4 T34671 C0 0.010372s   - verbosity 1 set for 1 matches in 109,535 functions for 24 byte clause '1=function-BroFunc::Call' // type=FUNCTION keyword=BroFunc::Call
+#5 T34671 C0 0.010374s   - verbosity 1 set for 1 matches in 109,535 functions for 28 byte clause '1=function-BuiltinFunc::Call' // type=FUNCTION keyword=BuiltinFunc::Call
+#6 T34671 C0 0.010376s   - verbosity 1 set for 2 matches in 109,535 functions for 29 byte clause '1=function-RuleMatcher::Match' // type=FUNCTION keyword=RuleMatcher::Match
+#7 T34671 C0 0.010378s   - verbosity 1 set for 1 matches in 109,535 functions for 19 byte clause '1=function-UID::Set' // type=FUNCTION keyword=UID::Set
+#8 T34671 C0 0.010380s   - verbosity 1 set for 1 matches in 109,535 functions for 30 byte clause '1=function-net_packet_dispatch' // type=FUNCTION keyword=net_packet_dispatch
+#9 T34671 C0 0.010382s   - verbosity 1 set for 1 matches in 109,535 functions for 22 byte clause '1=function-UID::Base62' // type=FUNCTION keyword=UID::Base62
+#10 T34671 C0 0.010385s   } // cwrap_log_verbosity_set()
+#11 T34671 C0 0.010388s + cwrap_log_quiet_until(name=net_run) {} // #1 going quiet until function net_run() [cwrap_log_quiet_until() ignores verbosity!]
+#12 T34671 C0 0.624778s + net_run() { // #1
+#13 T34671 C0 0.624996s   + BroFunc::Call() { // #1 name=Broker::log_flush()
+#14 T34671 C0 0.625016s     + BroFunc::Call() { // #2 name=Broker::flush_logs()
+#15 T34671 C0 0.625021s       + BuiltinFunc::Call() {} // #1 name=Broker::__flush_logs()
+#16 T34671 C0 0.625030s       } // BroFunc::Call()
+#17 T34671 C0 0.625047s     } // BroFunc::Call()
+#18 T34671 C0 0.625056s   + BroFunc::Call() { // #3 name=ChecksumOffloading::check()
+#19 T34671 C0 0.625062s     + BuiltinFunc::Call() {} // #2 name=get_net_stats()
+#20 T34671 C0 0.625134s     } // BroFunc::Call()
+#21 T34671 C0 0.625138s   + BroFunc::Call() {} // #4 name=filter_change_tracking()
+#22 T34671 C0 0.625144s   + BroFunc::Call() { // #5 name=net_stats_update()
+#23 T34671 C0 0.625147s     + BuiltinFunc::Call() {} // #3 name=get_net_stats()
+#24 T34671 C0 0.625176s     } // BroFunc::Call()
+#25 T34671 C0 1.005470s   + net_packet_dispatch() { // #1
+#26 T34671 C0 1.005905s     + Bro::UID::Set(bits=96/128 n=0) {} // #1 uid[96 bits]=".h......s]....s."=0xf1681e1e-00000000-735da9f6-f5a173a8
+#27 T34671 C0 1.005955s     + Bro::UID::Base62() {} // #1 prefix=".h......s]....s."=0xf1681e1e-00000000-735da9f6-f5a173a8=C14ecyXevFmAVbFse
+#28 T34671 C0 1.006030s     + RuleMatcher::Match(data[0]=n/a) { // #1 matching Payload rules [1,0]
+#29 T34671 C0 1.006054s       + internal_md5(data[7]="43178&."=0x34333137-382600) {} // #1 out="..G.H......}..T."=0x14b947d1-48dae184-17d1947d-b40c54ee
+#30 T34671 C0 1.006328s       + internal_md5(data[799]="44178&54178&6617.."=0x34343137-38263534-31373826-36363137..) {} // #2 out="\..p.>X..."!.n.."=0x5c9f1f70-d63e5892-fec32221-c56e03b0
+#31 T34671 C0 1.006384s       } // RuleMatcher::Match()
+#32 T34671 C0 1.006390s     + RuleMatcher::Match(data[0]=n/a) {} // #2 matching Payload rules [1,0]
+#33 T34671 C0 1.006432s     + RuleMatcher::Match(data[943]="GET /complete/se.."=0x47455420-2f636f6d-706c6574-652f7365..) { // #3 matching Payload rules [0,0]
+#34 T34671 C0 1.006463s       + internal_md5(data[169]="99578&30678&4367.."=0x39393537-38263330-36373826-34333637..) {} // #3 out="&.t..y.-..VR...H"=0x26ff74f1-e679192d-9b1b5652-99e5e948
+#35 T34671 C0 1.006515s       + internal_md5(data[181]="99578&30678&6367.."=0x39393537-38263330-36373826-36333637..) {} // #4 out="t.~..PI.kBxb...."=0x74b27efd-da5049fd-6b427862-c2f7dfce
+#36 T34671 C0 1.006556s       + internal_md5(data[175]="99578&30678&8367.."=0x39393537-38263330-36373826-38333637..) {} // #5 out=".t.J[...m.z.W..."=0xb574014a-5b94e193-6dd57a04-57d01e1f
 ...
-#67 T115152 C0 1.017195s       + internal_md5(data[127]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #36 out="..r m.. g..4..MK"=0xf9fb7220-6dbfd120-67c19434-ddd44d4b
-#68 T115152 C0 1.017210s       + internal_md5(data[133]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #37 out="...Vb...1b..g?X."=0x99b4e756-622eedff-3162b10a-673f58ea
-#69 T115152 C0 1.017225s       + internal_md5(data[133]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #38 out=">.]I.2.D..?C.F.J"=0x3e9c5d49-d832ee44-d7893f43-d546984a
-#70 T115152 C0 1.017287s       } // RuleMatcher::Match()
-#71 T115152 C0 1.017308s     + BroFunc::Call() {} // #6 name=new_connection()
-#72 T115152 C0 1.017387s     } // net_packet_dispatch()
-#73 T115152 C0 1.017437s   + net_packet_dispatch() { // #2
-#74 T115152 C0 1.017465s     + RuleMatcher::Match(data[0]=n/a) {} // #4 matching Payload rules [1,0]
-#75 T115152 C0 1.017476s     + RuleMatcher::Match(data[0]=n/a) {} // #5 matching Payload rules [1,0]
-#76 T115152 C0 1.017484s     + RuleMatcher::Match(data[386]="HTTP/1.1 200 OK..."=0x48545450-2f312e31-20323030-204f4b0d..) { // #6 matching Payload rules [0,0]
-#77 T115152 C0 1.017510s       + internal_md5(data[181]="99578&30678&3167.."=0x39393537-38263330-36373826-33313637..) {} // #39 out="....1.....@..s]."=0x0c051604-311e83db-009d40f9-be735d82
-#78 T115152 C0 1.017544s       + internal_md5(data[181]="99578&30678&6367.."=0x39393537-38263330-36373826-36333637..) {} // #40 out="....g..E.gDg...W"=0xca1c10b7-67f1f945-fb674467-021ba057
-#79 T115152 C0 1.017572s       + internal_md5(data[169]="99578&30678&8367.."=0x39393537-38263330-36373826-38333637..) {} // #41 out="......}........."=0x8cb71118-1f9a7d1c-96aced92-a5959583
+#67 T34671 C0 1.007370s       + internal_md5(data[127]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #36 out="..r m.. g..4..MK"=0xf9fb7220-6dbfd120-67c19434-ddd44d4b
+#68 T34671 C0 1.007389s       + internal_md5(data[133]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #37 out="...Vb...1b..g?X."=0x99b4e756-622eedff-3162b10a-673f58ea
+#69 T34671 C0 1.007407s       + internal_md5(data[133]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #38 out=">.]I.2.D..?C.F.J"=0x3e9c5d49-d832ee44-d7893f43-d546984a
+#70 T34671 C0 1.007479s       } // RuleMatcher::Match()
+#71 T34671 C0 1.007520s     + BroFunc::Call() {} // #6 name=new_connection()
+#72 T34671 C0 1.007580s     } // net_packet_dispatch()
+#73 T34671 C0 1.007621s   + net_packet_dispatch() { // #2
+#74 T34671 C0 1.007666s     + RuleMatcher::Match(data[0]=n/a) {} // #4 matching Payload rules [1,0]
+#75 T34671 C0 1.007677s     + RuleMatcher::Match(data[0]=n/a) {} // #5 matching Payload rules [1,0]
+#76 T34671 C0 1.007687s     + RuleMatcher::Match(data[386]="HTTP/1.1 200 OK..."=0x48545450-2f312e31-20323030-204f4b0d..) { // #6 matching Payload rules [0,0]
+#77 T34671 C0 1.007724s       + internal_md5(data[181]="99578&30678&3167.."=0x39393537-38263330-36373826-33313637..) {} // #39 out="....1.....@..s]."=0x0c051604-311e83db-009d40f9-be735d82
+#78 T34671 C0 1.007760s       + internal_md5(data[181]="99578&30678&6367.."=0x39393537-38263330-36373826-36333637..) {} // #40 out="....g..E.gDg...W"=0xca1c10b7-67f1f945-fb674467-021ba057
+#79 T34671 C0 1.007790s       + internal_md5(data[169]="99578&30678&8367.."=0x39393537-38263330-36373826-38333637..) {} // #41 out="......}........."=0x8cb71118-1f9a7d1c-96aced92-a5959583
 ...
-#95 T115152 C0 1.017937s       + internal_md5(data[139]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #57 out="PC.R....-6X....."=0x5043c052-a28602ce-2d365818-041eb21a
-#96 T115152 C0 1.017963s       + internal_md5(data[127]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #58 out="..r m.. g..4..MK"=0xf9fb7220-6dbfd120-67c19434-ddd44d4b
-#97 T115152 C0 1.017980s       + internal_md5(data[127]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #59 out="..r m.. g..4..MK"=0xf9fb7220-6dbfd120-67c19434-ddd44d4b
-#98 T115152 C0 1.018025s       } // RuleMatcher::Match()
-#99 T115152 C0 1.018038s     } // net_packet_dispatch()
-#100 T115152 C0 1.018051s   + net_packet_dispatch() { // #3
-#101 T115152 C0 1.018187s     + Bro::UID::Set(bits=96/128 n=0) {} // #2 uid[96 bits]="KDQ.....#...x..."=0x4b44512e-00000000-23f21414-781c87fb
-#102 T115152 C0 1.018206s     + Bro::UID::Base62() {} // #2 prefix="KDQ.....#...x..."=0x4b44512e-00000000-23f21414-781c87fb=CtrxAQj0Clmc7lSAl
-#103 T115152 C0 1.018265s     + RuleMatcher::Match(data[0]=n/a) {} // #7 matching Payload rules [1,0]
-#104 T115152 C0 1.018271s     + RuleMatcher::Match(data[0]=n/a) {} // #8 matching Payload rules [1,0]
-#105 T115152 C0 1.018277s     + BroFunc::Call() {} // #7 name=new_connection()
-#106 T115152 C0 1.018299s     } // net_packet_dispatch()
-#107 T115152 C0 1.018309s   + net_packet_dispatch() {} // #4
-#108 T115152 C0 1.018394s   + net_packet_dispatch() { // #5
-#109 T115152 C0 1.018448s     + RuleMatcher::Match(data[0]=n/a) {} // #9 matching Payload rules [1,0]
-#110 T115152 C0 1.018468s     + RuleMatcher::Match(data[0]=n/a) {} // #10 matching Payload rules [1,0]
-#111 T115152 C0 1.018475s     + BroFunc::Call() {} // #8 name=connection_established()
-#112 T115152 C0 1.018521s     } // net_packet_dispatch()
-#113 T115152 C0 1.018529s   + net_packet_dispatch() {} // #6
-#114 T115152 C0 1.018542s   + net_packet_dispatch() { // #7
-#115 T115152 C0 1.018569s     + RuleMatcher::Match(data[45]="/complete/search.."=0x2f636f6d-706c6574-652f7365-61726368..) {} // #11 matching HTTP-REQUEST rules [1,1]
-#116 T115152 C0 1.018627s     + RuleMatcher::Match(data[4]="Host"=0x486f7374) {} // #12 matching HTTP-REQUEST-HEADER rules [1,0]
-#117 T115152 C0 1.018632s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #13 matching HTTP-REQUEST-HEADER rules [0,0]
-#118 T115152 C0 1.018635s     + RuleMatcher::Match(data[18]="clients1.google..."=0x636c6965-6e747331-2e676f6f-676c652e..) {} // #14 matching HTTP-REQUEST-HEADER rules [0,1]
-#119 T115152 C0 1.018656s     + RuleMatcher::Match(data[10]="Connection"=0x436f6e6e-65637469-6f6e) {} // #15 matching HTTP-REQUEST-HEADER rules [1,0]
-#120 T115152 C0 1.018661s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #16 matching HTTP-REQUEST-HEADER rules [0,0]
-#121 T115152 C0 1.018664s     + RuleMatcher::Match(data[10]="keep-alive"=0x6b656570-2d616c69-7665) {} // #17 matching HTTP-REQUEST-HEADER rules [0,1]
-#122 T115152 C0 1.018674s     + RuleMatcher::Match(data[10]="User-Agent"=0x55736572-2d416765-6e74) {} // #18 matching HTTP-REQUEST-HEADER rules [1,0]
-#123 T115152 C0 1.018678s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #19 matching HTTP-REQUEST-HEADER rules [0,0]
-#124 T115152 C0 1.018681s     + RuleMatcher::Match(data[119]="Mozilla/5.0 (Win.."=0x4d6f7a69-6c6c612f-352e3020-2857696e..) {} // #20 matching HTTP-REQUEST-HEADER rules [0,1]
-#125 T115152 C0 1.018692s     + RuleMatcher::Match(data[15]="Accept-Encoding"=0x41636365-70742d45-6e636f64-696e67) {} // #21 matching HTTP-REQUEST-HEADER rules [1,0]
-#126 T115152 C0 1.018696s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #22 matching HTTP-REQUEST-HEADER rules [0,0]
-#127 T115152 C0 1.018699s     + RuleMatcher::Match(data[17]="gzip,deflate,sdc.."=0x677a6970-2c646566-6c617465-2c736463..) {} // #23 matching HTTP-REQUEST-HEADER rules [0,1]
-#128 T115152 C0 1.018708s     + RuleMatcher::Match(data[15]="Accept-Language"=0x41636365-70742d4c-616e6775-616765) {} // #24 matching HTTP-REQUEST-HEADER rules [1,0]
-#129 T115152 C0 1.018713s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #25 matching HTTP-REQUEST-HEADER rules [0,0]
-#130 T115152 C0 1.018716s     + RuleMatcher::Match(data[14]="en-US,en;q=0.8"=0x656e2d55-532c656e-3b713d30-2e38) {} // #26 matching HTTP-REQUEST-HEADER rules [0,1]
-#131 T115152 C0 1.018746s     + RuleMatcher::Match(data[14]="Accept-Charset"=0x41636365-70742d43-68617273-6574) {} // #27 matching HTTP-REQUEST-HEADER rules [1,0]
-#132 T115152 C0 1.018752s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #28 matching HTTP-REQUEST-HEADER rules [0,0]
-#133 T115152 C0 1.018755s     + RuleMatcher::Match(data[30]="ISO-8859-1,utf-8.."=0x49534f2d-38383539-2d312c75-74662d38..) {} // #29 matching HTTP-REQUEST-HEADER rules [0,1]
-#134 T115152 C0 1.018765s     + RuleMatcher::Match(data[6]="Cookie"=0x436f6f6b-6965) {} // #30 matching HTTP-REQUEST-HEADER rules [1,0]
-#135 T115152 C0 1.018769s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #31 matching HTTP-REQUEST-HEADER rules [0,0]
-#136 T115152 C0 1.018771s     + RuleMatcher::Match(data[572]="PREF=ID=c2e35001.."=0x50524546-3d49443d-63326533-35303031..) {} // #32 matching HTTP-REQUEST-HEADER rules [0,1]
-#137 T115152 C0 1.018814s     + BroFunc::Call() { // #9 name=protocol_confirmation()
-#138 T115152 C0 1.018825s       + BroFunc::Call() { // #10 name=Analyzer::name()
-#139 T115152 C0 1.018832s         + BuiltinFunc::Call() {} // #4 name=Analyzer::__name()
-#140 T115152 C0 1.018851s         } // BroFunc::Call()
-#141 T115152 C0 1.018860s       + BuiltinFunc::Call() {} // #5 name=fmt()
-#142 T115152 C0 1.018898s       } // BroFunc::Call()
-#143 T115152 C0 1.018908s     + BroFunc::Call() { // #11 name=http_request()
-#144 T115152 C0 1.018928s       + BroFunc::Call() { // #12 name=HTTP::set_state()
-#145 T115152 C0 1.018945s         + BroFunc::Call() { // #13 name=HTTP::new_http_session()
-#146 T115152 C0 1.018969s           + BuiltinFunc::Call() {} // #6 name=network_time()
-#147 T115152 C0 1.018983s           } // BroFunc::Call()
-#148 T115152 C0 1.018995s         } // BroFunc::Call()
-#149 T115152 C0 1.019003s       } // BroFunc::Call()
-#150 T115152 C0 1.019006s     + BroFunc::Call() { // #14 name=http_begin_entity()
-#151 T115152 C0 1.019010s       + BroFunc::Call() {} // #15 name=HTTP::set_state()
-#152 T115152 C0 1.019029s       } // BroFunc::Call()
-#153 T115152 C0 1.019036s     + BroFunc::Call() { // #16 name=http_header()
-#154 T115152 C0 1.019041s       + BroFunc::Call() {} // #17 name=HTTP::set_state()
-#155 T115152 C0 1.019057s       + BuiltinFunc::Call() { // #7 name=split_string1()
-#156 T115152 C0 1.019082s         + internal_md5(data[7]="72726&."=0x37323732-362600) {} // #60 out=".R".{.P.3.m.,.;&"=0x135222af-7bb9501c-33b26dad-2cab3b26
-#157 T115152 C0 1.019131s         } // BuiltinFunc::Call()
-#158 T115152 C0 1.019146s       } // BroFunc::Call()
-#159 T115152 C0 1.019152s     + BroFunc::Call() { // #18 name=http_header()
-#160 T115152 C0 1.019163s       + BroFunc::Call() {} // #19 name=HTTP::set_state()
-#161 T115152 C0 1.019185s       } // BroFunc::Call()
-#162 T115152 C0 1.019189s     + BroFunc::Call() { // #20 name=http_header()
-#163 T115152 C0 1.019191s       + BroFunc::Call() {} // #21 name=HTTP::set_state()
-#164 T115152 C0 1.019207s       } // BroFunc::Call()
-#165 T115152 C0 1.019210s     + BroFunc::Call() { // #22 name=http_header()
-#166 T115152 C0 1.019213s       + BroFunc::Call() {} // #23 name=HTTP::set_state()
-#167 T115152 C0 1.019230s       } // BroFunc::Call()
-#168 T115152 C0 1.019234s     + BroFunc::Call() { // #24 name=http_header()
-#169 T115152 C0 1.019236s       + BroFunc::Call() {} // #25 name=HTTP::set_state()
-#170 T115152 C0 1.019252s       } // BroFunc::Call()
-#171 T115152 C0 1.019255s     + BroFunc::Call() { // #26 name=http_header()
-#172 T115152 C0 1.019258s       + BroFunc::Call() {} // #27 name=HTTP::set_state()
-#173 T115152 C0 1.019274s       } // BroFunc::Call()
-#174 T115152 C0 1.019278s     + BroFunc::Call() { // #28 name=http_header()
-#175 T115152 C0 1.019280s       + BroFunc::Call() {} // #29 name=HTTP::set_state()
-#176 T115152 C0 1.019297s       } // BroFunc::Call()
-#177 T115152 C0 1.019300s     + BroFunc::Call() {} // #30 name=http_end_entity()
-#178 T115152 C0 1.019306s     + BroFunc::Call() { // #31 name=get_file_handle()
-#179 T115152 C0 1.019319s       + BroFunc::Call() { // #32 name=HTTP::get_file_handle()
-#180 T115152 C0 1.019391s         + BroFunc::Call() { // #33 name=id_string()
-#181 T115152 C0 1.019418s           + BuiltinFunc::Call() {} // #8 name=fmt()
-#182 T115152 C0 1.019449s           } // BroFunc::Call()
-#183 T115152 C0 1.019456s         + BuiltinFunc::Call() {} // #9 name=cat()
-#184 T115152 C0 1.019498s         } // BroFunc::Call()
-#185 T115152 C0 1.019503s       + BuiltinFunc::Call() { // #10 name=set_file_handle()
-#186 T115152 C0 1.019519s         + internal_md5(data[107]="Analyzer::ANALYZ.."=0x416e616c-797a6572-3a3a414e-414c595a..) {} // #61 out="V.#......uS?.O!."=0x56aa2300-c786b593-d075533f-a34f2112
-#187 T115152 C0 1.019537s         + Bro::UID::Set(bits=96/128 n=2) {} // #3 uid[96 bits]=".........uS?.O!."=0xc786b593-00000000-d075533f-a34f2112
-#188 T115152 C0 1.019546s         + Bro::UID::Base62() {} // #3 prefix=".........uS?.O!."=0xc786b593-00000000-d075533f-a34f2112=Fhj3IH2wcmEDeSnvy1
-#189 T115152 C0 1.019553s         } // BuiltinFunc::Call()
-#190 T115152 C0 1.019557s       } // BroFunc::Call()
-#191 T115152 C0 1.019604s     + RuleMatcher::Match(data[944]="GET /complete/se.."=0x47455420-2f636f6d-706c6574-652f7365..) {} // #33 matching Payload rules [0,0]
-#192 T115152 C0 1.019680s     + BroFunc::Call() { // #34 name=http_message_done()
-#193 T115152 C0 1.019686s       + BroFunc::Call() {} // #35 name=HTTP::set_state()
-#194 T115152 C0 1.019730s       } // BroFunc::Call()
-#195 T115152 C0 1.019735s     } // net_packet_dispatch()
-#196 T115152 C0 1.019763s   + net_packet_dispatch() {} // #8
-#197 T115152 C0 1.019796s   + net_packet_dispatch() {} // #9
-#198 T115152 C0 1.019812s   + net_packet_dispatch() { // #10
-#199 T115152 C0 1.019854s     + RuleMatcher::Match(data[4]="Date"=0x44617465) {} // #34 matching HTTP-REPLY-HEADER rules [1,0]
-#200 T115152 C0 1.019862s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #35 matching HTTP-REPLY-HEADER rules [0,0]
-#201 T115152 C0 1.019865s     + RuleMatcher::Match(data[29]="Tue, 25 Jan 2011.."=0x5475652c-20323520-4a616e20-32303131..) {} // #36 matching HTTP-REPLY-HEADER rules [0,1]
-#202 T115152 C0 1.019879s     + RuleMatcher::Match(data[7]="Expires"=0x45787069-726573) {} // #37 matching HTTP-REPLY-HEADER rules [1,0]
-#203 T115152 C0 1.019884s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #38 matching HTTP-REPLY-HEADER rules [0,0]
-#204 T115152 C0 1.019886s     + RuleMatcher::Match(data[29]="Tue, 25 Jan 2011.."=0x5475652c-20323520-4a616e20-32303131..) {} // #39 matching HTTP-REPLY-HEADER rules [0,1]
-#205 T115152 C0 1.019896s     + RuleMatcher::Match(data[13]="Cache-Control"=0x43616368-652d436f-6e74726f-6c) {} // #40 matching HTTP-REPLY-HEADER rules [1,0]
-#206 T115152 C0 1.019900s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #41 matching HTTP-REPLY-HEADER rules [0,0]
-#207 T115152 C0 1.019903s     + RuleMatcher::Match(data[21]="private, max-age.."=0x70726976-6174652c-206d6178-2d616765..) {} // #42 matching HTTP-REPLY-HEADER rules [0,1]
-#208 T115152 C0 1.019914s     + RuleMatcher::Match(data[12]="Content-Type"=0x436f6e74-656e742d-54797065) {} // #43 matching HTTP-REPLY-HEADER rules [1,0]
-#209 T115152 C0 1.019918s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #44 matching HTTP-REPLY-HEADER rules [0,0]
-#210 T115152 C0 1.019921s     + RuleMatcher::Match(data[30]="text/javascript;.."=0x74657874-2f6a6176-61736372-6970743b..) {} // #45 matching HTTP-REPLY-HEADER rules [0,1]
-#211 T115152 C0 1.019930s     + RuleMatcher::Match(data[16]="Content-Encoding"=0x436f6e74-656e742d-456e636f-64696e67) {} // #46 matching HTTP-REPLY-HEADER rules [1,0]
-#212 T115152 C0 1.019935s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #47 matching HTTP-REPLY-HEADER rules [0,0]
-#213 T115152 C0 1.019938s     + RuleMatcher::Match(data[4]="gzip"=0x677a6970) {} // #48 matching HTTP-REPLY-HEADER rules [0,1]
-#214 T115152 C0 1.019946s     + RuleMatcher::Match(data[6]="Server"=0x53657276-6572) {} // #49 matching HTTP-REPLY-HEADER rules [1,0]
-#215 T115152 C0 1.019950s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #50 matching HTTP-REPLY-HEADER rules [0,0]
-#216 T115152 C0 1.019953s     + RuleMatcher::Match(data[3]="gws"=0x677773) {} // #51 matching HTTP-REPLY-HEADER rules [0,1]
-#217 T115152 C0 1.019961s     + RuleMatcher::Match(data[14]="Content-Length"=0x436f6e74-656e742d-4c656e67-7468) {} // #52 matching HTTP-REPLY-HEADER rules [1,0]
-#218 T115152 C0 1.019965s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #53 matching HTTP-REPLY-HEADER rules [0,0]
-#219 T115152 C0 1.019968s     + RuleMatcher::Match(data[3]="216"=0x323136) {} // #54 matching HTTP-REPLY-HEADER rules [0,1]
-#220 T115152 C0 1.019976s     + RuleMatcher::Match(data[16]="X-XSS-Protection"=0x582d5853-532d5072-6f746563-74696f6e) {} // #55 matching HTTP-REPLY-HEADER rules [1,0]
-#221 T115152 C0 1.019980s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #56 matching HTTP-REPLY-HEADER rules [0,0]
-#222 T115152 C0 1.019983s     + RuleMatcher::Match(data[13]="1; mode=block"=0x313b206d-6f64653d-626c6f63-6b) {} // #57 matching HTTP-REPLY-HEADER rules [0,1]
-#223 T115152 C0 1.020036s     + BroFunc::Call() { // #36 name=http_reply()
-#224 T115152 C0 1.020055s       + BroFunc::Call() {} // #37 name=HTTP::set_state()
-#225 T115152 C0 1.020077s       + BroFunc::Call() {} // #38 name=HTTP::code_in_range()
-#226 T115152 C0 1.020087s       } // BroFunc::Call()
-#227 T115152 C0 1.020091s     + BroFunc::Call() { // #39 name=http_begin_entity()
-#228 T115152 C0 1.020093s       + BroFunc::Call() {} // #40 name=HTTP::set_state()
-#229 T115152 C0 1.020121s       } // BroFunc::Call()
-#230 T115152 C0 1.020124s     + BroFunc::Call() { // #41 name=http_header()
-#231 T115152 C0 1.020127s       + BroFunc::Call() {} // #42 name=HTTP::set_state()
-#232 T115152 C0 1.020141s       } // BroFunc::Call()
-#233 T115152 C0 1.020144s     + BroFunc::Call() { // #43 name=http_header()
-#234 T115152 C0 1.020147s       + BroFunc::Call() {} // #44 name=HTTP::set_state()
-#235 T115152 C0 1.020160s       } // BroFunc::Call()
-#236 T115152 C0 1.020163s     + BroFunc::Call() { // #45 name=http_header()
-#237 T115152 C0 1.020166s       + BroFunc::Call() {} // #46 name=HTTP::set_state()
-#238 T115152 C0 1.020179s       } // BroFunc::Call()
-#239 T115152 C0 1.020182s     + BroFunc::Call() { // #47 name=http_header()
-#240 T115152 C0 1.020184s       + BroFunc::Call() {} // #48 name=HTTP::set_state()
-#241 T115152 C0 1.020209s       + internal_md5(data[19]="00926&10926&8092.."=0x30303932-36263130-39323626-38303932..) {} // #62 out=",.....Sj:...}k.t"=0x2cbe0adc-84aa536a-3ac383c3-7d6b9974
-#242 T115152 C0 1.020232s       + internal_md5(data[19]="00926&10926&8092.."=0x30303932-36263130-39323626-38303932..) {} // #63 out=",.....Sj:...}k.t"=0x2cbe0adc-84aa536a-3ac383c3-7d6b9974
-#243 T115152 C0 1.020243s       } // BroFunc::Call()
-#244 T115152 C0 1.020246s     + BroFunc::Call() { // #49 name=http_header()
-#245 T115152 C0 1.020250s       + BroFunc::Call() {} // #50 name=HTTP::set_state()
-#246 T115152 C0 1.020266s       } // BroFunc::Call()
-#247 T115152 C0 1.020269s     + BroFunc::Call() { // #51 name=http_header()
-#248 T115152 C0 1.020272s       + BroFunc::Call() {} // #52 name=HTTP::set_state()
-#249 T115152 C0 1.020286s       } // BroFunc::Call()
-#250 T115152 C0 1.020289s     + BroFunc::Call() { // #53 name=http_header()
-#251 T115152 C0 1.020291s       + BroFunc::Call() {} // #54 name=HTTP::set_state()
-#252 T115152 C0 1.020304s       } // BroFunc::Call()
-#253 T115152 C0 1.020307s     + BroFunc::Call() { // #55 name=http_header()
-#254 T115152 C0 1.020309s       + BroFunc::Call() {} // #56 name=HTTP::set_state()
-#255 T115152 C0 1.020376s       } // BroFunc::Call()
-#256 T115152 C0 1.020389s     + BroFunc::Call() { // #57 name=get_file_handle()
-#257 T115152 C0 1.020406s       + BroFunc::Call() { // #58 name=HTTP::get_file_handle()
-#258 T115152 C0 1.020423s         + BroFunc::Call() { // #59 name=id_string()
-#259 T115152 C0 1.020429s           + BuiltinFunc::Call() {} // #11 name=fmt()
-#260 T115152 C0 1.020446s           } // BroFunc::Call()
-#261 T115152 C0 1.020448s         + BuiltinFunc::Call() {} // #12 name=cat()
-#262 T115152 C0 1.020460s         } // BroFunc::Call()
-#263 T115152 C0 1.020463s       + BuiltinFunc::Call() { // #13 name=set_file_handle()
-#264 T115152 C0 1.020466s         + internal_md5(data[107]="Analyzer::ANALYZ.."=0x416e616c-797a6572-3a3a414e-414c595a..) {} // #64 out=".....i.y.`....A."=0xd0c898e9-8b69ef79-12600aca-919741ac
-#265 T115152 C0 1.020475s         + Bro::UID::Set(bits=96/128 n=2) {} // #4 uid[96 bits]=".i.y.....`....A."=0x8b69ef79-00000000-12600aca-919741ac
-#266 T115152 C0 1.020480s         + Bro::UID::Base62() {} // #4 prefix=".i.y.....`....A."=0x8b69ef79-00000000-12600aca-919741ac=FJFGre2mIJsmBnMUMe
-#267 T115152 C0 1.020485s         } // BuiltinFunc::Call()
-#268 T115152 C0 1.020488s       } // BroFunc::Call()
-#269 T115152 C0 1.020547s     + internal_md5(data[48]=".................."=0x00000000-00000000-0000ffff-c0a80383..) {} // #65 out="A..=.7..k..K...^"=0x41fc113d-e537cbca-6bcc944b-c780ee5e
-#270 T115152 C0 1.020555s     + internal_md5(data[16]="..........}.. .."=0x08b7d1b1-f4c017a1-19be7d9b-e42001a5) {} // #66 out="_..4.9..:&..R.{+"=0x5fd80234-0239ea91-3a26c3f6-52987b2b
-#271 T115152 C0 1.020582s     + BroFunc::Call() { // #60 name=file_new()
-#272 T115152 C0 1.020587s       + BroFunc::Call() {} // #61 name=Files::set_info()
-#273 T115152 C0 1.020628s       + BroFunc::Call() { // #62 name=Files::enable_reassembly()
-#274 T115152 C0 1.020632s         + BuiltinFunc::Call() {} // #14 name=Files::__enable_reassembly()
-#275 T115152 C0 1.020647s         } // BroFunc::Call()
-#276 T115152 C0 1.020650s       + BroFunc::Call() { // #63 name=Files::set_reassembly_buffer_size()
-#277 T115152 C0 1.020656s         + BuiltinFunc::Call() {} // #15 name=Files::__set_reassembly_buffer()
-#278 T115152 C0 1.020663s         } // BroFunc::Call()
-#279 T115152 C0 1.020668s       } // BroFunc::Call()
-#280 T115152 C0 1.020678s     + BroFunc::Call() { // #64 name=file_over_new_connection()
-#281 T115152 C0 1.020682s       + BroFunc::Call() {} // #65 name=Files::set_info()
-#282 T115152 C0 1.020738s       } // BroFunc::Call()
-#283 T115152 C0 1.020752s     + RuleMatcher::Match(data[273]="["msn",["http:\/.."=0x5b226d73-6e222c5b-22687474-703a5c2f..) {} // #58 matching HTTP-REPLY-BODY rules [1,0]
-#284 T115152 C0 1.020794s     + RuleMatcher::Match() { // #1
-#285 T115152 C0 1.020839s       + internal_md5(data[343]="61946&71946&0394.."=0x36313934-36263731-39343626-30333934..) {} // #67 out="..D/..l."kf....."=0xada1442f-d8956c92-226b66d8-818f82b3
-#286 T115152 C0 1.020868s       + internal_md5(data[19]="41656&18656&8475.."=0x34313635-36263138-36353626-38343735..) {} // #68 out="D.7y..n.L.."...@"=0x44db3779-e9d06ebf-4ca58822-18b41d40
-#287 T115152 C0 1.020882s       + internal_md5(data[19]="51656&28656&9475.."=0x35313635-36263238-36353626-39343735..) {} // #69 out="...C.......=aR.."=0xe698f343-15fa1e84-d4d6013d-6152ccc1
+#95 T34671 C0 1.008260s       + internal_md5(data[139]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #57 out="PC.R....-6X....."=0x5043c052-a28602ce-2d365818-041eb21a
+#96 T34671 C0 1.008289s       + internal_md5(data[127]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #58 out="..r m.. g..4..MK"=0xf9fb7220-6dbfd120-67c19434-ddd44d4b
+#97 T34671 C0 1.008310s       + internal_md5(data[127]="99578&30678&2867.."=0x39393537-38263330-36373826-32383637..) {} // #59 out="..r m.. g..4..MK"=0xf9fb7220-6dbfd120-67c19434-ddd44d4b
+#98 T34671 C0 1.008362s       } // RuleMatcher::Match()
+#99 T34671 C0 1.008382s     } // net_packet_dispatch()
+#100 T34671 C0 1.008403s   + net_packet_dispatch() { // #3
+#101 T34671 C0 1.008558s     + Bro::UID::Set(bits=96/128 n=0) {} // #2 uid[96 bits]="KDQ.....#...x..."=0x4b44512e-00000000-23f21414-781c87fb
+#102 T34671 C0 1.008579s     + Bro::UID::Base62() {} // #2 prefix="KDQ.....#...x..."=0x4b44512e-00000000-23f21414-781c87fb=CtrxAQj0Clmc7lSAl
+#103 T34671 C0 1.008635s     + RuleMatcher::Match(data[0]=n/a) {} // #7 matching Payload rules [1,0]
+#104 T34671 C0 1.008643s     + RuleMatcher::Match(data[0]=n/a) {} // #8 matching Payload rules [1,0]
+#105 T34671 C0 1.008650s     + BroFunc::Call() {} // #7 name=new_connection()
+#106 T34671 C0 1.008672s     } // net_packet_dispatch()
+#107 T34671 C0 1.008682s   + net_packet_dispatch() {} // #4
+#108 T34671 C0 1.008704s   + net_packet_dispatch() { // #5
+#109 T34671 C0 1.008727s     + RuleMatcher::Match(data[0]=n/a) {} // #9 matching Payload rules [1,0]
+#110 T34671 C0 1.008744s     + RuleMatcher::Match(data[0]=n/a) {} // #10 matching Payload rules [1,0]
+#111 T34671 C0 1.008754s     + BroFunc::Call() {} // #8 name=connection_established()
+#112 T34671 C0 1.008786s     } // net_packet_dispatch()
+#113 T34671 C0 1.008794s   + net_packet_dispatch() {} // #6
+#114 T34671 C0 1.008808s   + net_packet_dispatch() { // #7
+#115 T34671 C0 1.008827s     + RuleMatcher::Match(data[45]="/complete/search.."=0x2f636f6d-706c6574-652f7365-61726368..) {} // #11 matching HTTP-REQUEST rules [1,1]
+#116 T34671 C0 1.008887s     + RuleMatcher::Match(data[4]="Host"=0x486f7374) {} // #12 matching HTTP-REQUEST-HEADER rules [1,0]
+#117 T34671 C0 1.008893s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #13 matching HTTP-REQUEST-HEADER rules [0,0]
+#118 T34671 C0 1.008896s     + RuleMatcher::Match(data[18]="clients1.google..."=0x636c6965-6e747331-2e676f6f-676c652e..) {} // #14 matching HTTP-REQUEST-HEADER rules [0,1]
+#119 T34671 C0 1.008913s     + RuleMatcher::Match(data[10]="Connection"=0x436f6e6e-65637469-6f6e) {} // #15 matching HTTP-REQUEST-HEADER rules [1,0]
+#120 T34671 C0 1.008918s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #16 matching HTTP-REQUEST-HEADER rules [0,0]
+#121 T34671 C0 1.008921s     + RuleMatcher::Match(data[10]="keep-alive"=0x6b656570-2d616c69-7665) {} // #17 matching HTTP-REQUEST-HEADER rules [0,1]
+#122 T34671 C0 1.008932s     + RuleMatcher::Match(data[10]="User-Agent"=0x55736572-2d416765-6e74) {} // #18 matching HTTP-REQUEST-HEADER rules [1,0]
+#123 T34671 C0 1.008936s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #19 matching HTTP-REQUEST-HEADER rules [0,0]
+#124 T34671 C0 1.008940s     + RuleMatcher::Match(data[119]="Mozilla/5.0 (Win.."=0x4d6f7a69-6c6c612f-352e3020-2857696e..) {} // #20 matching HTTP-REQUEST-HEADER rules [0,1]
+#125 T34671 C0 1.008951s     + RuleMatcher::Match(data[15]="Accept-Encoding"=0x41636365-70742d45-6e636f64-696e67) {} // #21 matching HTTP-REQUEST-HEADER rules [1,0]
+#126 T34671 C0 1.008956s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #22 matching HTTP-REQUEST-HEADER rules [0,0]
+#127 T34671 C0 1.008959s     + RuleMatcher::Match(data[17]="gzip,deflate,sdc.."=0x677a6970-2c646566-6c617465-2c736463..) {} // #23 matching HTTP-REQUEST-HEADER rules [0,1]
+#128 T34671 C0 1.008970s     + RuleMatcher::Match(data[15]="Accept-Language"=0x41636365-70742d4c-616e6775-616765) {} // #24 matching HTTP-REQUEST-HEADER rules [1,0]
+#129 T34671 C0 1.008976s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #25 matching HTTP-REQUEST-HEADER rules [0,0]
+#130 T34671 C0 1.008979s     + RuleMatcher::Match(data[14]="en-US,en;q=0.8"=0x656e2d55-532c656e-3b713d30-2e38) {} // #26 matching HTTP-REQUEST-HEADER rules [0,1]
+#131 T34671 C0 1.009003s     + RuleMatcher::Match(data[14]="Accept-Charset"=0x41636365-70742d43-68617273-6574) {} // #27 matching HTTP-REQUEST-HEADER rules [1,0]
+#132 T34671 C0 1.009009s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #28 matching HTTP-REQUEST-HEADER rules [0,0]
+#133 T34671 C0 1.009012s     + RuleMatcher::Match(data[30]="ISO-8859-1,utf-8.."=0x49534f2d-38383539-2d312c75-74662d38..) {} // #29 matching HTTP-REQUEST-HEADER rules [0,1]
+#134 T34671 C0 1.009023s     + RuleMatcher::Match(data[6]="Cookie"=0x436f6f6b-6965) {} // #30 matching HTTP-REQUEST-HEADER rules [1,0]
+#135 T34671 C0 1.009028s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #31 matching HTTP-REQUEST-HEADER rules [0,0]
+#136 T34671 C0 1.009031s     + RuleMatcher::Match(data[572]="PREF=ID=c2e35001.."=0x50524546-3d49443d-63326533-35303031..) {} // #32 matching HTTP-REQUEST-HEADER rules [0,1]
+#137 T34671 C0 1.009072s     + BroFunc::Call() { // #9 name=protocol_confirmation()
+#138 T34671 C0 1.009083s       + BroFunc::Call() { // #10 name=Analyzer::name()
+#139 T34671 C0 1.009135s         + BuiltinFunc::Call() {} // #4 name=Analyzer::__name()
+#140 T34671 C0 1.009172s         } // BroFunc::Call()
+#141 T34671 C0 1.009181s       + BuiltinFunc::Call() {} // #5 name=fmt()
+#142 T34671 C0 1.009222s       } // BroFunc::Call()
+#143 T34671 C0 1.009234s     + BroFunc::Call() { // #11 name=http_request()
+#144 T34671 C0 1.009251s       + BroFunc::Call() { // #12 name=HTTP::set_state()
+#145 T34671 C0 1.009272s         + BroFunc::Call() { // #13 name=HTTP::new_http_session()
+#146 T34671 C0 1.009300s           + BuiltinFunc::Call() {} // #6 name=network_time()
+#147 T34671 C0 1.009313s           } // BroFunc::Call()
+#148 T34671 C0 1.009328s         } // BroFunc::Call()
+#149 T34671 C0 1.009337s       } // BroFunc::Call()
+#150 T34671 C0 1.009341s     + BroFunc::Call() { // #14 name=http_begin_entity()
+#151 T34671 C0 1.009345s       + BroFunc::Call() {} // #15 name=HTTP::set_state()
+#152 T34671 C0 1.009369s       } // BroFunc::Call()
+#153 T34671 C0 1.009373s     + BroFunc::Call() { // #16 name=http_header()
+#154 T34671 C0 1.009377s       + BroFunc::Call() {} // #17 name=HTTP::set_state()
+#155 T34671 C0 1.009403s       + BuiltinFunc::Call() { // #7 name=split_string1()
+#156 T34671 C0 1.009433s         + internal_md5(data[7]="72726&."=0x37323732-362600) {} // #60 out=".R".{.P.3.m.,.;&"=0x135222af-7bb9501c-33b26dad-2cab3b26
+#157 T34671 C0 1.009482s         } // BuiltinFunc::Call()
+#158 T34671 C0 1.009501s       } // BroFunc::Call()
+#159 T34671 C0 1.009505s     + BroFunc::Call() { // #18 name=http_header()
+#160 T34671 C0 1.009510s       + BroFunc::Call() {} // #19 name=HTTP::set_state()
+#161 T34671 C0 1.009541s       } // BroFunc::Call()
+#162 T34671 C0 1.009545s     + BroFunc::Call() { // #20 name=http_header()
+#163 T34671 C0 1.009549s       + BroFunc::Call() {} // #21 name=HTTP::set_state()
+#164 T34671 C0 1.009567s       } // BroFunc::Call()
+#165 T34671 C0 1.009570s     + BroFunc::Call() { // #22 name=http_header()
+#166 T34671 C0 1.009573s       + BroFunc::Call() {} // #23 name=HTTP::set_state()
+#167 T34671 C0 1.009596s       } // BroFunc::Call()
+#168 T34671 C0 1.009599s     + BroFunc::Call() { // #24 name=http_header()
+#169 T34671 C0 1.009603s       + BroFunc::Call() {} // #25 name=HTTP::set_state()
+#170 T34671 C0 1.009622s       } // BroFunc::Call()
+#171 T34671 C0 1.009626s     + BroFunc::Call() { // #26 name=http_header()
+#172 T34671 C0 1.009629s       + BroFunc::Call() {} // #27 name=HTTP::set_state()
+#173 T34671 C0 1.009649s       } // BroFunc::Call()
+#174 T34671 C0 1.009655s     + BroFunc::Call() { // #28 name=http_header()
+#175 T34671 C0 1.009658s       + BroFunc::Call() {} // #29 name=HTTP::set_state()
+#176 T34671 C0 1.009678s       } // BroFunc::Call()
+#177 T34671 C0 1.009682s     + BroFunc::Call() {} // #30 name=http_end_entity()
+#178 T34671 C0 1.009690s     + BroFunc::Call() { // #31 name=get_file_handle()
+#179 T34671 C0 1.009702s       + BroFunc::Call() { // #32 name=HTTP::get_file_handle()
+#180 T34671 C0 1.009719s         + BroFunc::Call() { // #33 name=id_string()
+#181 T34671 C0 1.009727s           + BuiltinFunc::Call() {} // #8 name=fmt()
+#182 T34671 C0 1.009746s           } // BroFunc::Call()
+#183 T34671 C0 1.009749s         + BuiltinFunc::Call() {} // #9 name=cat()
+#184 T34671 C0 1.009795s         } // BroFunc::Call()
+#185 T34671 C0 1.009798s       + BuiltinFunc::Call() { // #10 name=set_file_handle()
+#186 T34671 C0 1.009810s         + internal_md5(data[107]="Analyzer::ANALYZ.."=0x416e616c-797a6572-3a3a414e-414c595a..) {} // #61 out="......3gOC...t[."=0x14b10290-a4913367-4f43f088-88745bb9
+#187 T34671 C0 1.009822s         + Bro::UID::Set(bits=96/128 n=2) {} // #3 uid[96 bits]="..3g....OC...t[."=0xa4913367-00000000-4f43f088-88745bb9
+#188 T34671 C0 1.009831s         + Bro::UID::Base62() {} // #3 prefix="..3g....OC...t[."=0xa4913367-00000000-4f43f088-88745bb9=FAMUaT17UgrzBlrEUf
+#189 T34671 C0 1.009840s         } // BuiltinFunc::Call()
+#190 T34671 C0 1.009844s       } // BroFunc::Call()
+#191 T34671 C0 1.009904s     + RuleMatcher::Match(data[944]="GET /complete/se.."=0x47455420-2f636f6d-706c6574-652f7365..) {} // #33 matching Payload rules [0,0]
+#192 T34671 C0 1.010019s     + BroFunc::Call() { // #34 name=http_message_done()
+#193 T34671 C0 1.010029s       + BroFunc::Call() {} // #35 name=HTTP::set_state()
+#194 T34671 C0 1.010180s       } // BroFunc::Call()
+#195 T34671 C0 1.010211s     } // net_packet_dispatch()
+#196 T34671 C0 1.010257s   + net_packet_dispatch() {} // #8
+#197 T34671 C0 1.010311s   + net_packet_dispatch() {} // #9
+#198 T34671 C0 1.010333s   + net_packet_dispatch() { // #10
+#199 T34671 C0 1.010411s     + RuleMatcher::Match(data[4]="Date"=0x44617465) {} // #34 matching HTTP-REPLY-HEADER rules [1,0]
+#200 T34671 C0 1.010420s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #35 matching HTTP-REPLY-HEADER rules [0,0]
+#201 T34671 C0 1.010423s     + RuleMatcher::Match(data[29]="Tue, 25 Jan 2011.."=0x5475652c-20323520-4a616e20-32303131..) {} // #36 matching HTTP-REPLY-HEADER rules [0,1]
+#202 T34671 C0 1.010442s     + RuleMatcher::Match(data[7]="Expires"=0x45787069-726573) {} // #37 matching HTTP-REPLY-HEADER rules [1,0]
+#203 T34671 C0 1.010446s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #38 matching HTTP-REPLY-HEADER rules [0,0]
+#204 T34671 C0 1.010448s     + RuleMatcher::Match(data[29]="Tue, 25 Jan 2011.."=0x5475652c-20323520-4a616e20-32303131..) {} // #39 matching HTTP-REPLY-HEADER rules [0,1]
+#205 T34671 C0 1.010459s     + RuleMatcher::Match(data[13]="Cache-Control"=0x43616368-652d436f-6e74726f-6c) {} // #40 matching HTTP-REPLY-HEADER rules [1,0]
+#206 T34671 C0 1.010463s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #41 matching HTTP-REPLY-HEADER rules [0,0]
+#207 T34671 C0 1.010466s     + RuleMatcher::Match(data[21]="private, max-age.."=0x70726976-6174652c-206d6178-2d616765..) {} // #42 matching HTTP-REPLY-HEADER rules [0,1]
+#208 T34671 C0 1.010477s     + RuleMatcher::Match(data[12]="Content-Type"=0x436f6e74-656e742d-54797065) {} // #43 matching HTTP-REPLY-HEADER rules [1,0]
+#209 T34671 C0 1.010482s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #44 matching HTTP-REPLY-HEADER rules [0,0]
+#210 T34671 C0 1.010485s     + RuleMatcher::Match(data[30]="text/javascript;.."=0x74657874-2f6a6176-61736372-6970743b..) {} // #45 matching HTTP-REPLY-HEADER rules [0,1]
+#211 T34671 C0 1.010498s     + RuleMatcher::Match(data[16]="Content-Encoding"=0x436f6e74-656e742d-456e636f-64696e67) {} // #46 matching HTTP-REPLY-HEADER rules [1,0]
+#212 T34671 C0 1.010503s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #47 matching HTTP-REPLY-HEADER rules [0,0]
+#213 T34671 C0 1.010506s     + RuleMatcher::Match(data[4]="gzip"=0x677a6970) {} // #48 matching HTTP-REPLY-HEADER rules [0,1]
+#214 T34671 C0 1.010515s     + RuleMatcher::Match(data[6]="Server"=0x53657276-6572) {} // #49 matching HTTP-REPLY-HEADER rules [1,0]
+#215 T34671 C0 1.010519s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #50 matching HTTP-REPLY-HEADER rules [0,0]
+#216 T34671 C0 1.010521s     + RuleMatcher::Match(data[3]="gws"=0x677773) {} // #51 matching HTTP-REPLY-HEADER rules [0,1]
+#217 T34671 C0 1.010531s     + RuleMatcher::Match(data[14]="Content-Length"=0x436f6e74-656e742d-4c656e67-7468) {} // #52 matching HTTP-REPLY-HEADER rules [1,0]
+#218 T34671 C0 1.010536s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #53 matching HTTP-REPLY-HEADER rules [0,0]
+#219 T34671 C0 1.010539s     + RuleMatcher::Match(data[3]="216"=0x323136) {} // #54 matching HTTP-REPLY-HEADER rules [0,1]
+#220 T34671 C0 1.010546s     + RuleMatcher::Match(data[16]="X-XSS-Protection"=0x582d5853-532d5072-6f746563-74696f6e) {} // #55 matching HTTP-REPLY-HEADER rules [1,0]
+#221 T34671 C0 1.010551s     + RuleMatcher::Match(data[2]=": "=0x3a20) {} // #56 matching HTTP-REPLY-HEADER rules [0,0]
+#222 T34671 C0 1.010554s     + RuleMatcher::Match(data[13]="1; mode=block"=0x313b206d-6f64653d-626c6f63-6b) {} // #57 matching HTTP-REPLY-HEADER rules [0,1]
+#223 T34671 C0 1.010643s     + BroFunc::Call() { // #36 name=http_reply()
+#224 T34671 C0 1.010679s       + BroFunc::Call() {} // #37 name=HTTP::set_state()
+#225 T34671 C0 1.010707s       + BroFunc::Call() {} // #38 name=HTTP::code_in_range()
+#226 T34671 C0 1.010721s       } // BroFunc::Call()
+#227 T34671 C0 1.010724s     + BroFunc::Call() { // #39 name=http_begin_entity()
+#228 T34671 C0 1.010728s       + BroFunc::Call() {} // #40 name=HTTP::set_state()
+#229 T34671 C0 1.010747s       } // BroFunc::Call()
+#230 T34671 C0 1.010761s     + BroFunc::Call() { // #41 name=http_header()
+#231 T34671 C0 1.010765s       + BroFunc::Call() {} // #42 name=HTTP::set_state()
+#232 T34671 C0 1.010783s       } // BroFunc::Call()
+#233 T34671 C0 1.010786s     + BroFunc::Call() { // #43 name=http_header()
+#234 T34671 C0 1.010789s       + BroFunc::Call() {} // #44 name=HTTP::set_state()
+#235 T34671 C0 1.010807s       } // BroFunc::Call()
+#236 T34671 C0 1.010810s     + BroFunc::Call() { // #45 name=http_header()
+#237 T34671 C0 1.010812s       + BroFunc::Call() {} // #46 name=HTTP::set_state()
+#238 T34671 C0 1.010826s       } // BroFunc::Call()
+#239 T34671 C0 1.010829s     + BroFunc::Call() { // #47 name=http_header()
+#240 T34671 C0 1.010832s       + BroFunc::Call() {} // #48 name=HTTP::set_state()
+#241 T34671 C0 1.010873s       + internal_md5(data[19]="00926&10926&8092.."=0x30303932-36263130-39323626-38303932..) {} // #62 out=",.....Sj:...}k.t"=0x2cbe0adc-84aa536a-3ac383c3-7d6b9974
+#242 T34671 C0 1.010917s       + internal_md5(data[19]="00926&10926&8092.."=0x30303932-36263130-39323626-38303932..) {} // #63 out=",.....Sj:...}k.t"=0x2cbe0adc-84aa536a-3ac383c3-7d6b9974
+#243 T34671 C0 1.010930s       } // BroFunc::Call()
+#244 T34671 C0 1.010934s     + BroFunc::Call() { // #49 name=http_header()
+#245 T34671 C0 1.010938s       + BroFunc::Call() {} // #50 name=HTTP::set_state()
+#246 T34671 C0 1.010957s       } // BroFunc::Call()
+#247 T34671 C0 1.010961s     + BroFunc::Call() { // #51 name=http_header()
+#248 T34671 C0 1.010963s       + BroFunc::Call() {} // #52 name=HTTP::set_state()
+#249 T34671 C0 1.010979s       } // BroFunc::Call()
+#250 T34671 C0 1.010982s     + BroFunc::Call() { // #53 name=http_header()
+#251 T34671 C0 1.010984s       + BroFunc::Call() {} // #54 name=HTTP::set_state()
+#252 T34671 C0 1.010998s       } // BroFunc::Call()
+#253 T34671 C0 1.011001s     + BroFunc::Call() { // #55 name=http_header()
+#254 T34671 C0 1.011004s       + BroFunc::Call() {} // #56 name=HTTP::set_state()
+#255 T34671 C0 1.011018s       } // BroFunc::Call()
+#256 T34671 C0 1.011022s     + BroFunc::Call() { // #57 name=get_file_handle()
+#257 T34671 C0 1.011042s       + BroFunc::Call() { // #58 name=HTTP::get_file_handle()
+#258 T34671 C0 1.011079s         + BroFunc::Call() { // #59 name=id_string()
+#259 T34671 C0 1.011128s           + BuiltinFunc::Call() {} // #11 name=fmt()
+#260 T34671 C0 1.011186s           } // BroFunc::Call()
+#261 T34671 C0 1.011190s         + BuiltinFunc::Call() {} // #12 name=cat()
+#262 T34671 C0 1.011226s         } // BroFunc::Call()
+#263 T34671 C0 1.011229s       + BuiltinFunc::Call() { // #13 name=set_file_handle()
+#264 T34671 C0 1.011236s         + internal_md5(data[107]="Analyzer::ANALYZ.."=0x416e616c-797a6572-3a3a414e-414c595a..) {} // #64 out="(w+.....>.9....."=0x28772bf9-d8c5829c-3e12399e-faa9c1b0
+#265 T34671 C0 1.011247s         + Bro::UID::Set(bits=96/128 n=2) {} // #4 uid[96 bits]="........>.9....."=0xd8c5829c-00000000-3e12399e-faa9c1b0
+#266 T34671 C0 1.011254s         + Bro::UID::Base62() {} // #4 prefix="........>.9....."=0xd8c5829c-00000000-3e12399e-faa9c1b0=FmHEHR2SkQwUxYYRaf
+#267 T34671 C0 1.011260s         } // BuiltinFunc::Call()
+#268 T34671 C0 1.011265s       } // BroFunc::Call()
+#269 T34671 C0 1.011384s     + internal_md5(data[48]=".................."=0x00000000-00000000-0000ffff-c0a80383..) {} // #65 out="A..=.7..k..K...^"=0x41fc113d-e537cbca-6bcc944b-c780ee5e
+#270 T34671 C0 1.011396s     + internal_md5(data[16]="..........}.. .."=0x08b7d1b1-f4c017a1-19be7d9b-e42001a5) {} // #66 out="_..4.9..:&..R.{+"=0x5fd80234-0239ea91-3a26c3f6-52987b2b
+#271 T34671 C0 1.011446s     + BroFunc::Call() { // #60 name=file_new()
+#272 T34671 C0 1.011459s       + BroFunc::Call() {} // #61 name=Files::set_info()
+#273 T34671 C0 1.011536s       + BroFunc::Call() { // #62 name=Files::enable_reassembly()
+#274 T34671 C0 1.011540s         + BuiltinFunc::Call() {} // #14 name=Files::__enable_reassembly()
+#275 T34671 C0 1.011551s         } // BroFunc::Call()
+#276 T34671 C0 1.011555s       + BroFunc::Call() { // #63 name=Files::set_reassembly_buffer_size()
+#277 T34671 C0 1.011559s         + BuiltinFunc::Call() {} // #15 name=Files::__set_reassembly_buffer()
+#278 T34671 C0 1.011590s         } // BroFunc::Call()
+#279 T34671 C0 1.011597s       } // BroFunc::Call()
+#280 T34671 C0 1.011613s     + BroFunc::Call() { // #64 name=file_over_new_connection()
+#281 T34671 C0 1.011618s       + BroFunc::Call() {} // #65 name=Files::set_info()
+#282 T34671 C0 1.011718s       } // BroFunc::Call()
+#283 T34671 C0 1.011746s     + RuleMatcher::Match(data[273]="["msn",["http:\/.."=0x5b226d73-6e222c5b-22687474-703a5c2f..) {} // #58 matching HTTP-REPLY-BODY rules [1,0]
+#284 T34671 C0 1.011828s     + RuleMatcher::Match(data[273]="["msn",["http:\/.."=0x5b226d73-6e222c5b-22687474-703a5c2f..) { // #1 matching File Magic rules
+#285 T34671 C0 1.011909s       + internal_md5(data[343]="61946&71946&0394.."=0x36313934-36263731-39343626-30333934..) {} // #67 out="..D/..l."kf....."=0xada1442f-d8956c92-226b66d8-818f82b3
+#286 T34671 C0 1.011958s       + internal_md5(data[19]="41656&18656&8475.."=0x34313635-36263138-36353626-38343735..) {} // #68 out="D.7y..n.L.."...@"=0x44db3779-e9d06ebf-4ca58822-18b41d40
+#287 T34671 C0 1.011975s       + internal_md5(data[19]="51656&28656&9475.."=0x35313635-36263238-36353626-39343735..) {} // #69 out="...C.......=aR.."=0xe698f343-15fa1e84-d4d6013d-6152ccc1
 ...
-#898 T115152 C0 1.030144s       + internal_md5(data[7]="21968&."=0x32313936-382600) {} // #680 out=">.2ita5..^x....H"=0x3ec13269-7461359d-915e78be-0db3a448
-#899 T115152 C0 1.030155s       + internal_md5(data[7]="31078&."=0x33313037-382600) {} // #681 out="....#......6...."=0x1fbf1396-23c61cd1-1719c936-aeecbefc
-#900 T115152 C0 1.030166s       + internal_md5(data[7]="41078&."=0x34313037-382600) {} // #682 out="...Sn*.I.89...X."=0x020cd453-6e2aed49-fa38390d-1b8a58eb
-#901 T115152 C0 1.030219s       } // RuleMatcher::Match()
-#902 T115152 C0 1.030257s     + BroFunc::Call() {} // #66 name=http_end_entity()
-#903 T115152 C0 1.030326s     + BroFunc::Call() { // #67 name=file_sniff()
-#904 T115152 C0 1.030335s       + BroFunc::Call() {} // #68 name=Files::set_info()
-#905 T115152 C0 1.030430s       } // BroFunc::Call()
-#906 T115152 C0 1.030507s     + RuleMatcher::Match(data[487]="HTTP/1.1 200 OK..."=0x48545450-2f312e31-20323030-204f4b0d..) {} // #59 matching Payload rules [0,0]
-#907 T115152 C0 1.030568s     + BroFunc::Call() { // #69 name=file_state_remove()
-#908 T115152 C0 1.030573s       + BroFunc::Call() {} // #70 name=Files::set_info()
-#909 T115152 C0 1.030609s       + BroFunc::Call() { // #71 name=Log::write()
-#910 T115152 C0 1.030616s         + BuiltinFunc::Call() {} // #16 name=Log::__write()
-#911 T115152 C0 1.031169s         } // BroFunc::Call()
-#912 T115152 C0 1.031181s       } // BroFunc::Call()
-#913 T115152 C0 1.031185s     + BroFunc::Call() { // #72 name=http_message_done()
-#914 T115152 C0 1.031192s       + BroFunc::Call() {} // #73 name=HTTP::set_state()
-#915 T115152 C0 1.031223s       + BroFunc::Call() {} // #74 name=HTTP::code_in_range()
-#916 T115152 C0 1.031231s       + BroFunc::Call() { // #75 name=Log::write()
-#917 T115152 C0 1.031233s         + BuiltinFunc::Call() {} // #17 name=Log::__write()
-#918 T115152 C0 1.031859s         } // BroFunc::Call()
-#919 T115152 C0 1.031885s       } // BroFunc::Call()
-#920 T115152 C0 1.031891s     } // net_packet_dispatch()
-#921 T115152 C0 1.679472s   + BroFunc::Call() { // #76 name=Broker::log_flush()
-#922 T115152 C0 1.679521s     + BroFunc::Call() { // #77 name=Broker::flush_logs()
-#923 T115152 C0 1.679542s       + BuiltinFunc::Call() {} // #18 name=Broker::__flush_logs()
-#924 T115152 C0 1.679561s       } // BroFunc::Call()
-#925 T115152 C0 1.679571s     } // BroFunc::Call()
-#926 T115152 C0 2.039390s   + BroFunc::Call() { // #78 name=reporter_info()
-#927 T115152 C0 2.039465s     + BroFunc::Call() { // #79 name=Log::write()
-#928 T115152 C0 2.039480s       + BuiltinFunc::Call() {} // #19 name=Log::__write()
-#929 T115152 C0 2.040624s       } // BroFunc::Call()
-#930 T115152 C0 2.040656s     } // BroFunc::Call()
-#931 T115152 C0 2.040670s   + BroFunc::Call() { // #80 name=reporter_info()
-#932 T115152 C0 2.040727s     + BroFunc::Call() { // #81 name=Log::write()
-#933 T115152 C0 2.040737s       + BuiltinFunc::Call() {} // #20 name=Log::__write()
-#934 T115152 C0 2.040789s       } // BroFunc::Call()
-#935 T115152 C0 2.040794s     } // BroFunc::Call()
-#936 T115152 C0 2.040821s   + BroFunc::Call() {} // #82 name=net_done()
-#937 T115152 C0 2.040953s   + BroFunc::Call() { // #83 name=Broker::log_flush()
-#938 T115152 C0 2.040960s     + BroFunc::Call() { // #84 name=Broker::flush_logs()
-#939 T115152 C0 2.040970s       + BuiltinFunc::Call() {} // #21 name=Broker::__flush_logs()
-#940 T115152 C0 2.040983s       } // BroFunc::Call()
-#941 T115152 C0 2.040987s     } // BroFunc::Call()
-#942 T115152 C0 2.040992s   + BroFunc::Call() { // #85 name=ChecksumOffloading::check()
-#943 T115152 C0 2.041004s     + BuiltinFunc::Call() {} // #22 name=get_net_stats()
-#944 T115152 C0 2.041254s     } // BroFunc::Call()
-#945 T115152 C0 2.041270s   + BroFunc::Call() { // #86 name=net_stats_update()
-#946 T115152 C0 2.041278s     + BuiltinFunc::Call() {} // #23 name=get_net_stats()
-#947 T115152 C0 2.041393s     } // BroFunc::Call()
-#948 T115152 C0 2.041400s   + BroFunc::Call() {} // #87 name=filter_change_tracking()
-#949 T115152 C0 2.041547s   + BroFunc::Call() { // #88 name=get_file_handle()
-#950 T115152 C0 2.041596s     + BroFunc::Call() { // #89 name=HTTP::get_file_handle()
-#951 T115152 C0 2.041622s       + BroFunc::Call() { // #90 name=id_string()
-#952 T115152 C0 2.041635s         + BuiltinFunc::Call() {} // #24 name=fmt()
-#953 T115152 C0 2.041681s         } // BroFunc::Call()
-#954 T115152 C0 2.041685s       + BuiltinFunc::Call() {} // #25 name=cat()
-#955 T115152 C0 2.041711s       } // BroFunc::Call()
-#956 T115152 C0 2.041716s     + BuiltinFunc::Call() { // #26 name=set_file_handle()
-#957 T115152 C0 2.041723s       + internal_md5(data[107]="Analyzer::ANALYZ.."=0x416e616c-797a6572-3a3a414e-414c595a..) {} // #683 out="V.#......uS?.O!."=0x56aa2300-c786b593-d075533f-a34f2112
-#958 T115152 C0 2.041743s       + Bro::UID::Set(bits=96/128 n=2) {} // #5 uid[96 bits]=".........uS?.O!."=0xc786b593-00000000-d075533f-a34f2112
-#959 T115152 C0 2.041750s       + Bro::UID::Base62() {} // #5 prefix=".........uS?.O!."=0xc786b593-00000000-d075533f-a34f2112=Fhj3IH2wcmEDeSnvy1
-#960 T115152 C0 2.041757s       } // BuiltinFunc::Call()
-#961 T115152 C0 2.041761s     } // BroFunc::Call()
-#962 T115152 C0 2.041791s   + RuleMatcher::Match(data[0]=n/a) {} // #60 matching Payload rules [0,1]
-#963 T115152 C0 2.041840s   + RuleMatcher::Match(data[0]=n/a) {} // #61 matching Payload rules [0,1]
-#964 T115152 C0 2.041900s   + BroFunc::Call() { // #91 name=connection_state_remove()
-#965 T115152 C0 2.041908s     + BroFunc::Call() { // #92 name=Conn::set_conn()
-#966 T115152 C0 2.041935s       + BuiltinFunc::Call() {} // #27 name=get_port_transport_proto()
-#967 T115152 C0 2.041970s       + BroFunc::Call() { // #93 name=Conn::determine_service()
-#968 T115152 C0 2.041985s         + BuiltinFunc::Call() {} // #28 name=sub_bytes()
-#969 T115152 C0 2.042000s         + BuiltinFunc::Call() {} // #29 name=to_lower()
-#970 T115152 C0 2.042008s         } // BroFunc::Call()
-#971 T115152 C0 2.042014s       + BuiltinFunc::Call() {} // #30 name=get_port_transport_proto()
-#972 T115152 C0 2.042019s       + BroFunc::Call() {} // #94 name=Conn::conn_state()
-#973 T115152 C0 2.042050s       } // BroFunc::Call()
-#974 T115152 C0 2.042056s     + BuiltinFunc::Call() {} // #31 name=reading_traces()
-#975 T115152 C0 2.042063s     } // BroFunc::Call()
-#976 T115152 C0 2.042067s   + BroFunc::Call() { // #95 name=successful_connection_remove()
-#977 T115152 C0 2.042097s     + BroFunc::Call() {} // #96 name=KRB::fill_in_subjects()
-#978 T115152 C0 2.042131s     + BroFunc::Call() {} // #97 name=KRB::do_log()
-#979 T115152 C0 2.042210s     + BroFunc::Call() { // #98 name=Log::write()
-#980 T115152 C0 2.042223s       + BuiltinFunc::Call() {} // #32 name=Log::__write()
-#981 T115152 C0 2.042956s       } // BroFunc::Call()
-#982 T115152 C0 2.042974s     } // BroFunc::Call()
-#983 T115152 C0 2.042979s   + BroFunc::Call() { // #99 name=get_file_handle()
-#984 T115152 C0 2.042996s     + BroFunc::Call() {} // #100 name=HTTP::get_file_handle()
-#985 T115152 C0 2.043007s     + BuiltinFunc::Call() {} // #33 name=set_file_handle()
-#986 T115152 C0 2.043013s     } // BroFunc::Call()
-#987 T115152 C0 2.043028s   + RuleMatcher::Match(data[0]=n/a) {} // #62 matching Payload rules [0,1]
-#988 T115152 C0 2.043037s   + RuleMatcher::Match(data[0]=n/a) {} // #63 matching Payload rules [0,1]
-#989 T115152 C0 2.043065s   + BroFunc::Call() { // #101 name=connection_state_remove()
-#990 T115152 C0 2.043070s     + BroFunc::Call() { // #102 name=Conn::set_conn()
-#991 T115152 C0 2.043102s       + BuiltinFunc::Call() {} // #34 name=get_port_transport_proto()
-#992 T115152 C0 2.043134s       + BroFunc::Call() { // #103 name=Conn::determine_service()
-#993 T115152 C0 2.043145s         + BuiltinFunc::Call() {} // #35 name=to_lower()
-#994 T115152 C0 2.043154s         } // BroFunc::Call()
-#995 T115152 C0 2.043163s       + BuiltinFunc::Call() {} // #36 name=get_port_transport_proto()
-#996 T115152 C0 2.043168s       + BroFunc::Call() {} // #104 name=Conn::conn_state()
-#997 T115152 C0 2.043225s       } // BroFunc::Call()
-#998 T115152 C0 2.043233s     + BuiltinFunc::Call() {} // #37 name=reading_traces()
-#999 T115152 C0 2.043240s     } // BroFunc::Call()
-#1000 T115152 C0 2.043245s   + BroFunc::Call() { // #105 name=successful_connection_remove()
-#1001 T115152 C0 2.043278s     + BroFunc::Call() {} // #106 name=KRB::fill_in_subjects()
-#1002 T115152 C0 2.043310s     + BroFunc::Call() {} // #107 name=KRB::do_log()
-#1003 T115152 C0 2.043361s     + BroFunc::Call() { // #108 name=Log::write()
-#1004 T115152 C0 2.043365s       + BuiltinFunc::Call() {} // #38 name=Log::__write()
-#1005 T115152 C0 2.043444s       } // BroFunc::Call()
-#1006 T115152 C0 2.043455s     } // BroFunc::Call()
-#1007 T115152 C0 2.043692s   + BroFunc::Call() {} // #109 name=zeek_done()
-#1008 T115152 C0 2.043721s   + BroFunc::Call() { // #110 name=ChecksumOffloading::check()
-#1009 T115152 C0 2.043727s     + BuiltinFunc::Call() {} // #39 name=get_net_stats()
-#1010 T115152 C0 2.043894s     } // BroFunc::Call()
-#1011 T115152 C0 2.136621s + cwrap_log_stats() { // #1 [cwrap_log_stats() ignores verbosity!]
-#1012 T115152 C0 2.136632s   - 1 calls to 1 of 1 function variation(s) for cwrap_log_stats()
-#1013 T115152 C0 2.136657s   - 1 calls to 1 of 1 function variation(s) for cwrap_log_verbosity_set()
-#1014 T115152 C0 2.136673s   - 1 calls to 1 of 1 function variation(s) for cwrap_log_quiet_until()
-#1015 T115152 C0 2.137863s   - 110 calls to 1 of 1 function variation(s) for BroFunc::Call()
-#1016 T115152 C0 2.138170s   - 5 calls to 1 of 1 function variation(s) for Bro::UID::Base62()
-#1017 T115152 C0 2.138182s   - 1 calls to 2 of 2 function variation(s) for RuleMatcher::Match()
-#1018 T115152 C0 2.138186s   - 39 calls to 1 of 1 function variation(s) for BuiltinFunc::Call()
-#1019 T115152 C0 2.139783s   - 5 calls to 1 of 1 function variation(s) for Bro::UID::Set()
-#1020 T115152 C0 2.139856s   - 63 calls to 1 of 2 function variation(s) for RuleMatcher::Match()
-#1021 T115152 C0 2.139872s   - 1 calls to 1 of 1 function variation(s) for net_run()
-#1022 T115152 C0 2.139877s   - 10 calls to 1 of 1 function variation(s) for net_packet_dispatch()
-#1023 T115152 C0 2.139882s   - 683 calls to 1 of 1 function variation(s) for internal_md5()
-#1024 T115152 C0 2.139888s   } // cwrap_log_stats()
+#898 T34671 C0 1.022583s       + internal_md5(data[7]="21968&."=0x32313936-382600) {} // #680 out=">.2ita5..^x....H"=0x3ec13269-7461359d-915e78be-0db3a448
+#899 T34671 C0 1.022594s       + internal_md5(data[7]="31078&."=0x33313037-382600) {} // #681 out="....#......6...."=0x1fbf1396-23c61cd1-1719c936-aeecbefc
+#900 T34671 C0 1.022605s       + internal_md5(data[7]="41078&."=0x34313037-382600) {} // #682 out="...Sn*.I.89...X."=0x020cd453-6e2aed49-fa38390d-1b8a58eb
+#901 T34671 C0 1.022662s       } // RuleMatcher::Match()
+#902 T34671 C0 1.022706s     + BroFunc::Call() {} // #66 name=http_end_entity()
+#903 T34671 C0 1.022735s     + BroFunc::Call() { // #67 name=file_sniff()
+#904 T34671 C0 1.022742s       + BroFunc::Call() {} // #68 name=Files::set_info()
+#905 T34671 C0 1.022877s       } // BroFunc::Call()
+#906 T34671 C0 1.022959s     + RuleMatcher::Match(data[487]="HTTP/1.1 200 OK..."=0x48545450-2f312e31-20323030-204f4b0d..) {} // #59 matching Payload rules [0,0]
+#907 T34671 C0 1.023020s     + BroFunc::Call() { // #69 name=file_state_remove()
+#908 T34671 C0 1.023026s       + BroFunc::Call() {} // #70 name=Files::set_info()
+#909 T34671 C0 1.023077s       + BroFunc::Call() { // #71 name=Log::write()
+#910 T34671 C0 1.023085s         + BuiltinFunc::Call() {} // #16 name=Log::__write()
+#911 T34671 C0 1.023644s         } // BroFunc::Call()
+#912 T34671 C0 1.023658s       } // BroFunc::Call()
+#913 T34671 C0 1.023662s     + BroFunc::Call() { // #72 name=http_message_done()
+#914 T34671 C0 1.023667s       + BroFunc::Call() {} // #73 name=HTTP::set_state()
+#915 T34671 C0 1.023696s       + BroFunc::Call() {} // #74 name=HTTP::code_in_range()
+#916 T34671 C0 1.023703s       + BroFunc::Call() { // #75 name=Log::write()
+#917 T34671 C0 1.023705s         + BuiltinFunc::Call() {} // #17 name=Log::__write()
+#918 T34671 C0 1.024162s         } // BroFunc::Call()
+#919 T34671 C0 1.024178s       } // BroFunc::Call()
+#920 T34671 C0 1.024183s     } // net_packet_dispatch()
+#921 T34671 C0 1.626416s   + BroFunc::Call() { // #76 name=Broker::log_flush()
+#922 T34671 C0 1.626508s     + BroFunc::Call() { // #77 name=Broker::flush_logs()
+#923 T34671 C0 1.626572s       + BuiltinFunc::Call() {} // #18 name=Broker::__flush_logs()
+#924 T34671 C0 1.626629s       } // BroFunc::Call()
+#925 T34671 C0 1.626654s     } // BroFunc::Call()
+#926 T34671 C0 2.031062s   + BroFunc::Call() { // #78 name=reporter_info()
+#927 T34671 C0 2.031108s     + BroFunc::Call() { // #79 name=Log::write()
+#928 T34671 C0 2.031117s       + BuiltinFunc::Call() {} // #19 name=Log::__write()
+#929 T34671 C0 2.031752s       } // BroFunc::Call()
+#930 T34671 C0 2.031760s     } // BroFunc::Call()
+#931 T34671 C0 2.031766s   + BroFunc::Call() { // #80 name=reporter_info()
+#932 T34671 C0 2.031775s     + BroFunc::Call() { // #81 name=Log::write()
+#933 T34671 C0 2.031779s       + BuiltinFunc::Call() {} // #20 name=Log::__write()
+#934 T34671 C0 2.031807s       } // BroFunc::Call()
+#935 T34671 C0 2.031811s     } // BroFunc::Call()
+#936 T34671 C0 2.031818s   + BroFunc::Call() {} // #82 name=net_done()
+#937 T34671 C0 2.031898s   + BroFunc::Call() { // #83 name=Broker::log_flush()
+#938 T34671 C0 2.031902s     + BroFunc::Call() { // #84 name=Broker::flush_logs()
+#939 T34671 C0 2.031914s       + BuiltinFunc::Call() {} // #21 name=Broker::__flush_logs()
+#940 T34671 C0 2.031924s       } // BroFunc::Call()
+#941 T34671 C0 2.031927s     } // BroFunc::Call()
+#942 T34671 C0 2.031929s   + BroFunc::Call() { // #85 name=ChecksumOffloading::check()
+#943 T34671 C0 2.031936s     + BuiltinFunc::Call() {} // #22 name=get_net_stats()
+#944 T34671 C0 2.032034s     } // BroFunc::Call()
+#945 T34671 C0 2.032038s   + BroFunc::Call() { // #86 name=net_stats_update()
+#946 T34671 C0 2.032043s     + BuiltinFunc::Call() {} // #23 name=get_net_stats()
+#947 T34671 C0 2.032074s     } // BroFunc::Call()
+#948 T34671 C0 2.032077s   + BroFunc::Call() {} // #87 name=filter_change_tracking()
+#949 T34671 C0 2.032172s   + BroFunc::Call() { // #88 name=get_file_handle()
+#950 T34671 C0 2.032197s     + BroFunc::Call() { // #89 name=HTTP::get_file_handle()
+#951 T34671 C0 2.032218s       + BroFunc::Call() { // #90 name=id_string()
+#952 T34671 C0 2.032227s         + BuiltinFunc::Call() {} // #24 name=fmt()
+#953 T34671 C0 2.032249s         } // BroFunc::Call()
+#954 T34671 C0 2.032251s       + BuiltinFunc::Call() {} // #25 name=cat()
+#955 T34671 C0 2.032277s       } // BroFunc::Call()
+#956 T34671 C0 2.032280s     + BuiltinFunc::Call() { // #26 name=set_file_handle()
+#957 T34671 C0 2.032285s       + internal_md5(data[107]="Analyzer::ANALYZ.."=0x416e616c-797a6572-3a3a414e-414c595a..) {} // #683 out="......3gOC...t[."=0x14b10290-a4913367-4f43f088-88745bb9
+#958 T34671 C0 2.032303s       + Bro::UID::Set(bits=96/128 n=2) {} // #5 uid[96 bits]="..3g....OC...t[."=0xa4913367-00000000-4f43f088-88745bb9
+#959 T34671 C0 2.032308s       + Bro::UID::Base62() {} // #5 prefix="..3g....OC...t[."=0xa4913367-00000000-4f43f088-88745bb9=FAMUaT17UgrzBlrEUf
+#960 T34671 C0 2.032314s       } // BuiltinFunc::Call()
+#961 T34671 C0 2.032316s     } // BroFunc::Call()
+#962 T34671 C0 2.032324s   + RuleMatcher::Match(data[0]=n/a) {} // #60 matching Payload rules [0,1]
+#963 T34671 C0 2.032373s   + RuleMatcher::Match(data[0]=n/a) {} // #61 matching Payload rules [0,1]
+#964 T34671 C0 2.032426s   + BroFunc::Call() { // #91 name=connection_state_remove()
+#965 T34671 C0 2.032432s     + BroFunc::Call() { // #92 name=Conn::set_conn()
+#966 T34671 C0 2.032479s       + BuiltinFunc::Call() {} // #27 name=get_port_transport_proto()
+#967 T34671 C0 2.032530s       + BroFunc::Call() { // #93 name=Conn::determine_service()
+#968 T34671 C0 2.032548s         + BuiltinFunc::Call() {} // #28 name=sub_bytes()
+#969 T34671 C0 2.032560s         + BuiltinFunc::Call() {} // #29 name=to_lower()
+#970 T34671 C0 2.032566s         } // BroFunc::Call()
+#971 T34671 C0 2.032584s       + BuiltinFunc::Call() {} // #30 name=get_port_transport_proto()
+#972 T34671 C0 2.032589s       + BroFunc::Call() {} // #94 name=Conn::conn_state()
+#973 T34671 C0 2.032609s       } // BroFunc::Call()
+#974 T34671 C0 2.032614s     + BuiltinFunc::Call() {} // #31 name=reading_traces()
+#975 T34671 C0 2.032620s     } // BroFunc::Call()
+#976 T34671 C0 2.032623s   + BroFunc::Call() { // #95 name=successful_connection_remove()
+#977 T34671 C0 2.032661s     + BroFunc::Call() {} // #96 name=KRB::fill_in_subjects()
+#978 T34671 C0 2.032691s     + BroFunc::Call() {} // #97 name=KRB::do_log()
+#979 T34671 C0 2.032727s     + BroFunc::Call() { // #98 name=Log::write()
+#980 T34671 C0 2.032729s       + BuiltinFunc::Call() {} // #32 name=Log::__write()
+#981 T34671 C0 2.033176s       } // BroFunc::Call()
+#982 T34671 C0 2.033186s     } // BroFunc::Call()
+#983 T34671 C0 2.033190s   + BroFunc::Call() { // #99 name=get_file_handle()
+#984 T34671 C0 2.033200s     + BroFunc::Call() {} // #100 name=HTTP::get_file_handle()
+#985 T34671 C0 2.033207s     + BuiltinFunc::Call() {} // #33 name=set_file_handle()
+#986 T34671 C0 2.033211s     } // BroFunc::Call()
+#987 T34671 C0 2.033218s   + RuleMatcher::Match(data[0]=n/a) {} // #62 matching Payload rules [0,1]
+#988 T34671 C0 2.033225s   + RuleMatcher::Match(data[0]=n/a) {} // #63 matching Payload rules [0,1]
+#989 T34671 C0 2.033244s   + BroFunc::Call() { // #101 name=connection_state_remove()
+#990 T34671 C0 2.033248s     + BroFunc::Call() { // #102 name=Conn::set_conn()
+#991 T34671 C0 2.033260s       + BuiltinFunc::Call() {} // #34 name=get_port_transport_proto()
+#992 T34671 C0 2.033273s       + BroFunc::Call() { // #103 name=Conn::determine_service()
+#993 T34671 C0 2.033276s         + BuiltinFunc::Call() {} // #35 name=to_lower()
+#994 T34671 C0 2.033282s         } // BroFunc::Call()
+#995 T34671 C0 2.033286s       + BuiltinFunc::Call() {} // #36 name=get_port_transport_proto()
+#996 T34671 C0 2.033289s       + BroFunc::Call() {} // #104 name=Conn::conn_state()
+#997 T34671 C0 2.033302s       } // BroFunc::Call()
+#998 T34671 C0 2.033305s     + BuiltinFunc::Call() {} // #37 name=reading_traces()
+#999 T34671 C0 2.033309s     } // BroFunc::Call()
+#1000 T34671 C0 2.033311s   + BroFunc::Call() { // #105 name=successful_connection_remove()
+#1001 T34671 C0 2.033323s     + BroFunc::Call() {} // #106 name=KRB::fill_in_subjects()
+#1002 T34671 C0 2.033337s     + BroFunc::Call() {} // #107 name=KRB::do_log()
+#1003 T34671 C0 2.033364s     + BroFunc::Call() { // #108 name=Log::write()
+#1004 T34671 C0 2.033366s       + BuiltinFunc::Call() {} // #38 name=Log::__write()
+#1005 T34671 C0 2.033407s       } // BroFunc::Call()
+#1006 T34671 C0 2.033414s     } // BroFunc::Call()
+#1007 T34671 C0 2.033548s   + BroFunc::Call() {} // #109 name=zeek_done()
+#1008 T34671 C0 2.033580s   + BroFunc::Call() { // #110 name=ChecksumOffloading::check()
+#1009 T34671 C0 2.033583s     + BuiltinFunc::Call() {} // #39 name=get_net_stats()
+#1010 T34671 C0 2.033634s     } // BroFunc::Call()
+#1011 T34671 C0 2.153137s + cwrap_log_stats() { // #1 [cwrap_log_stats() ignores verbosity!]
+#1012 T34671 C0 2.153151s   - 1 calls to 1 of 1 function variation(s) for cwrap_log_stats()
+#1013 T34671 C0 2.153171s   - 1 calls to 1 of 1 function variation(s) for cwrap_log_verbosity_set()
+#1014 T34671 C0 2.153173s   - 1 calls to 1 of 1 function variation(s) for cwrap_log_quiet_until()
+#1015 T34671 C0 2.153774s   - 110 calls to 1 of 1 function variation(s) for BroFunc::Call()
+#1016 T34671 C0 2.153884s   - 5 calls to 1 of 1 function variation(s) for Bro::UID::Base62()
+#1017 T34671 C0 2.153891s   - 1 calls to 2 of 2 function variation(s) for RuleMatcher::Match()
+#1018 T34671 C0 2.153894s   - 39 calls to 1 of 1 function variation(s) for BuiltinFunc::Call()
+#1019 T34671 C0 2.154438s   - 5 calls to 1 of 1 function variation(s) for Bro::UID::Set()
+#1020 T34671 C0 2.154455s   - 63 calls to 1 of 2 function variation(s) for RuleMatcher::Match()
+#1021 T34671 C0 2.154471s   - 1 calls to 1 of 1 function variation(s) for net_run()
+#1022 T34671 C0 2.154482s   - 10 calls to 1 of 1 function variation(s) for net_packet_dispatch()
+#1023 T34671 C0 2.154486s   - 683 calls to 1 of 1 function variation(s) for internal_md5()
+#1024 T34671 C0 2.154491s   } // cwrap_log_stats()
 ```
 
 Most of the 683 calls to `internal_md5()` happen on packet 10 due to lazy regex deterministic finite automation.

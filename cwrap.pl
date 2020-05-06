@@ -388,6 +388,17 @@ sub demangle_name_sanitize_type_order {
     $demangled_name =~ s~(long) int\s*~$1~g; # 'long int' same as 'long'; see: https://stackoverflow.com/questions/17287957/is-long-unsigned-as-valid-as-unsigned-long-in-c
 
     $demangled_name =~ s~u_char~unsigned char~g; # hack for e.g. const u_char * --> const unsigned char*
+    $demangled_name =~ s~uint64_t~unsigned long~g;
+
+    # note: below we sanitize function parameters, i.e. inside (...)
+
+    while($demangled_name =~ s~(\(.*)<[^<>]+>~$1~gs) {} # e.g. std::map* from std::map<int, std::set<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >, std::greater<int>, std::allocator<std::pair<const int, std::set<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > > > >*
+
+    # This next quick and dirty hack means both of these cases will match:
+    # case 1: RuleMatcher::MIME_Matches*
+    # case 2: std::map*
+    while($demangled_name =~ s~(\(\s*|\,\s*)[^\,\*\s\:]+\:\:[^\,\*\s\)]+~$1c_o_m_p_l_e_x_t_y_p_e~gs) {} # e.g. c_o_m_p_l_e_x_t_y_p_e* from std::map*
+
     return $demangled_name;
 }
 
