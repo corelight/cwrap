@@ -1,4 +1,4 @@
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=(null) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _LIMIT=1,000 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=(null) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _LIMIT=10,000 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
 C0 + cwrap_log_verbosity_set() { #1
 C0   - verbosity=1
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
@@ -101,7 +101,7 @@ C0   - 6 calls to 1 of 1 function variation(s) for baz()
 C0   - 1 calls to 1 of 1 function variation(s) for bar()
 C0   - 25 calls to 12 of 14 functions instrumented
 C0   } // cwrap_log_stats() 
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=9/1=FUNCTION-my_ (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=(null) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _LIMIT=1,000 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGR
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=9/1=FUNCTION-my_ (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=(null) _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _LIMIT=10,000 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALG
 C0 + cwrap_log_verbosity_set() { #1
 C0   - verbosity=9/1=FUNCTION-my_
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]
@@ -129,7 +129,7 @@ C0   - 2 calls to 1 of 1 function variation(s) for cwrap_log_verbosity_set()
 C0   - 1 calls to 1 of 1 function variation(s) for my_public()
 C0   - 1 calls to 1 of 1 function variation(s) for my_private()
 C0   } // cwrap_log_stats() 
-cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=bye_baz _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _LIMIT=1,000 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
+cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=1 (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=bye_baz _STATS=1 _SHOW=0 _CURT=0 _FILE=0 _NUM=0 _COR_ID=1 _LIMIT=10,000 _THREAD_ID=0 _STACK_PTR=0 _TIMESTAMP=0 _UNWIND=0 _ON_VALGRIND=0
 C0 + cwrap_log_verbosity_set() { #1
 C0   - verbosity=1
 C0   - [cwrap_log_verbosity_set() ignores verbosity!]

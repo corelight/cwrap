@@ -146,7 +146,7 @@ Environment variables which influence cwrap at run-time
 - `CWRAP_LOG_TIMESTAMP=1`: Display elapsed seconds on each output line.
 - `CWRAP_LOG_THREAD_ID=1`: Display thread ID on each output line.
 - `CWRAP_LOG_COR_ID=1`: Display coroutine ID on each output line.
-- `CWRAP_LOG_LIMIT=<limit>`: Only log functions this many times; default 1,000.
+- `CWRAP_LOG_LIMIT=<limit>`: Only log functions this many times; default 10,000.
 - `CWRAP_LOG_STACK_PTR=1`: Display coroutine stack pointer on each output line.
 - `CWRAP_LOG_UNWIND=1`: Experimental option for debugging coroutine stack corruption.
 - `CWRAP_LOG_ON_VALGRIND`: Experimental option for debugging coroutine stack corruption.

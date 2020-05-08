@@ -20,6 +20,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+sub BEGIN {
+    my $module = "List::MoreUtils"                       ; eval sprintf "use %s", $module; if($@) { printf "ERROR: cwrap cannot detect Perl module %s; install using e.g. cpanm %s!\n", $module, $module; exit(1); }
+    my $module = "FFI::Platypus::Lang::CPP::Demangle::XS"; eval sprintf "use %s", $module; if($@) { printf "ERROR: cwrap cannot detect Perl module %s; install using e.g. cpanm %s!\n", $module, $module; exit(1); }
+    my $exe    = "c++filt"                               ; if(`which $exe` =~ m~^\s*$~s) { printf "ERROR: cwrap cannot detect external executable %s; please install!\n", $exe; exit(1); }
+    my $exe    = "llvm-cxxfilt"                          ; if(`which $exe` =~ m~^\s*$~s) { printf "ERROR: cwrap cannot detect external executable %s; please install!\n", $exe; exit(1); }
+}
+
 use strict;
 use Cwd;
 use Time::HiRes;
