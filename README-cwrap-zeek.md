@@ -437,7 +437,7 @@ Notes on cwrap limitations and run-time performance
 -----------
 Running `zeek hello.zeek` without cwrap verbosity enables takes 0.7 seconds, but with verbosity enabled it takes 16.5 seconds and spews ~ 19 million lines into a 3.3 GB size `cwrap.out` file.
 
-There is a hard-coded limit in cwrap which disables function instrumentation output after 10,000 calls. After that, function calls are still counted as if the function verbosity would have caused output. This is a fail safe mechanism to help reduce output size:
+There is a default limit (which can be changed via `CWRAP_LOG_LIMIT=<limit>`) in cwrap which disables function instrumentation output after 10,000 calls. After that, function calls are still counted as if the function verbosity would have caused output. This is a fail safe mechanism to help reduce output size:
 ```
 $ cat cwrap.out | egrep " BroObj::BroObj\(" | tail
 #206209 T14389 C0         + BroObj::BroObj() {} // #9992

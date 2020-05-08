@@ -965,6 +965,10 @@ struct CWRAP_DATA {
 #define CWRAP_LOG_COR_ID (1)
 #endif
 
+#ifndef CWRAP_LOG_LIMIT
+#define CWRAP_LOG_LIMIT (10000)
+#endif
+
 #ifndef CWRAP_LOG_UNWIND
 #define CWRAP_LOG_UNWIND (0)
 #endif
@@ -1016,6 +1020,7 @@ static          int           cwrap_log_output_num           = CWRAP_LOG_NUM ; /
 static          int           cwrap_log_output_curt          = CWRAP_LOG_CURT; // try to fold enter and leave lines if possible
 static          int           cwrap_log_output_file          = CWRAP_LOG_FILE; // output to file or stdout?
 static          int           cwrap_log_output_cor_id        = CWRAP_LOG_COR_ID;
+static          int           cwrap_log_output_limit         = CWRAP_LOG_LIMIT;
 static          int           cwrap_log_output_unwind        = CWRAP_LOG_UNWIND;
 static          int           cwrap_log_output_thread_id     = CWRAP_LOG_THREAD_ID;
 static          int           cwrap_log_output_stack_pointer = CWRAP_LOG_STACK_PTR;
@@ -1461,7 +1466,7 @@ void __cyg_profile_func_enter_always(void *this_fn, void *call_site) {
     //debug printf("debug: cwrap_log_verbosity=%%d ->name=%%s\\n", cwrap_log_verbosity, cw->name);
     cwrap_log_cor[cor_id].unique = cw;
     cw->calls ++;
-    if (cw->calls <= 10000) {
+    if (cw->calls <= cwrap_log_output_limit) {
         if (cwrap_log_output_curt) {
             cwrap_log_push(1, 1 /* no append */, 0 /* outside */, 1 /* not plain */, "+ %%s(", cw->name);
             cwrap_log_append("#%%d ", cw->calls);
@@ -1506,7 +1511,7 @@ void __cyg_profile_func_exit_always(void *this_fn, void *call_site) {
     void       * fa =                this_fn  ; // function address not necessarily unique; see linker -Wl,--whole-archive option
     CWRAP_DATA * cw = (CWRAP_DATA *) call_site; // cwrap data
     cwrap_data_sanity_check(fa, cw);
-    if (cw->calls <= 10000) {
+    if (cw->calls <= cwrap_log_output_limit) {
 #ifdef COR_XXHASH_STACK_COR_SWITCHES
         cor_xxhash_stack(2);
 #endif
@@ -1715,6 +1720,7 @@ int cwrap_log_init(void)
     char * p_env_curt                     = getenv("CWRAP_LOG_CURT");
     char * p_env_file                     = getenv("CWRAP_LOG_FILE");
     char * p_env_cor_id                   = getenv("CWRAP_LOG_COR_ID");
+    char * p_env_limit                    = getenv("CWRAP_LOG_LIMIT");
     char * p_env_unwind                   = getenv("CWRAP_LOG_UNWIND");
     char * p_env_thread_id                = getenv("CWRAP_LOG_THREAD_ID");
     char * p_env_stack_ptr                = getenv("CWRAP_LOG_STACK_PTR");
@@ -1727,6 +1733,7 @@ int cwrap_log_init(void)
            cwrap_log_output_curt          = p_env_curt        ? atoi(p_env_curt       ) : CWRAP_LOG_CURT;
            cwrap_log_output_file          = p_env_file        ? atoi(p_env_file       ) : CWRAP_LOG_FILE;
            cwrap_log_output_cor_id        = p_env_cor_id      ? atoi(p_env_cor_id     ) : CWRAP_LOG_COR_ID;
+           cwrap_log_output_limit         = p_env_limit       ? atoi(p_env_limit      ) : CWRAP_LOG_LIMIT;
            cwrap_log_output_unwind        = p_env_unwind      ? atoi(p_env_unwind     ) : CWRAP_LOG_UNWIND;
            cwrap_log_output_thread_id     = p_env_thread_id   ? atoi(p_env_thread_id  ) : CWRAP_LOG_THREAD_ID;
            cwrap_log_output_stack_pointer = p_env_stack_ptr   ? atoi(p_env_stack_ptr  ) : CWRAP_LOG_STACK_PTR;
@@ -1734,7 +1741,7 @@ int cwrap_log_init(void)
            cwrap_log_output_on_valgrind   = p_env_on_valgrind ? atoi(p_env_on_valgrind) : CWRAP_LOG_ON_VALGRIND;
     setlocale(LC_NUMERIC, "");
     if (p_env_verbosity) {
-        cwrap_log_plain("cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=%%s (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=%%s _STATS=%%d _SHOW=%%d _CURT=%%d _FILE=%%d _NUM=%%d _COR_ID=%%d _THREAD_ID=%%d _STACK_PTR=%%d _TIMESTAMP=%%d _UNWIND=%%d _ON_VALGRIND=%%d\\n",
+        cwrap_log_plain("cwrap_log_init() {} // CWRAP_LOG: _VERBOSITY_SET=%%s (<verbosity>[={file|function}-<keyword>][/...]) _QUIET_UNTIL=%%s _STATS=%%d _SHOW=%%d _CURT=%%d _FILE=%%d _NUM=%%d _COR_ID=%%d _LIMIT=%%'d _THREAD_ID=%%d _STACK_PTR=%%d _TIMESTAMP=%%d _UNWIND=%%d _ON_VALGRIND=%%d\\n",
             p_env_verbosity,
             p_env_quiet_until,
             stats,
@@ -1743,6 +1750,7 @@ int cwrap_log_init(void)
             cwrap_log_output_file,
             cwrap_log_output_num,
             cwrap_log_output_cor_id,
+            cwrap_log_output_limit,
             cwrap_log_output_thread_id,
             cwrap_log_output_stack_pointer,
             cwrap_log_output_elapsed_time,
