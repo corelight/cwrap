@@ -1261,6 +1261,8 @@ Zeek binary sizes for each compile:
 278,500,040 build/src/zeek <-- debug with cwrap
 ```
 
+Note: The production Zeek is much bigger than the debug Zeek. Why? This might be because of excessive amounts of gcc function in-lining which bloats the binary with effectively many copies of the frequently used functions.
+
 Zeek user time for each tcpreplay:
 ```
 user    0m18.009s <-- production
@@ -1271,6 +1273,8 @@ user    0m36.867s <-- debug with cwrap
 This shows that cwrap introduces a significant performance overhead of about 20% even if all instrumentation is disabled at run-time.
 
 Further investigation needs to be done to determine if most of this performance overhead is due to smaller, generally uninteresting for analysis, but very frequently called functions. In which case, a new feature for cwrap could be to avoid instrumenting those functions.
+
+It would be interesting to performance production Zeek with different types of gcc compile options, e.g. optimize for size versus optimize for speed (which it is currently). It would also be interesting to test this out on an object file by object file basis.
 
 Run cwrap debug Zeek which logging `net_packet_dispatch()` without cwrap curt output in order to see how long processing of each packet takes:
 ```
