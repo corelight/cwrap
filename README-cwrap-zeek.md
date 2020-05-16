@@ -1336,3 +1336,653 @@ Note: The 'total' listed on the end is inaccurate because of the 'x's.
 This shows that `net_packet_dispatch()` took 0.000003 seconds for 25,884 packets, whereas it took somewhere between 0.020000 and 0.029999 seconds for the slowest to process packet.
 
 It would be interesting to enable more cwrap instrumentation and analyze which areas of processing are the performance hot spots for each packet.
+
+Examining internal C++ trace for a single Zeek script function call
+-----------
+
+Create a simple Zeek script which calls function `foo()` in a loop.
+```
+$ cat hello.zeek
+# File "hello.zeek"
+
+function foo(x: count): count {
+    return x;
+}
+
+event zeek_init()
+    {
+    print "Hello";
+    local x = 0;
+    while (x < 10) {
+        foo(123);
+        ++x;
+    }
+    print "World!";
+    }
+```
+
+Run with script with cwrap compiled Zeek:
+```
+$ CWRAP_LOG_VERBOSITY_SET='1/9=function-std::/9=function-__gnu_cxx/9=function-operator/9=function-Unref/9=function-List<>/9=function-::~/9=function-table_entry_val_delete_func/9=function-Ref/9=function-Val::/9=function-::Name/9=function->' CWRAP_LOG_QUIET_UNTIL=EventMgr::Drain CWRAP_LOG_STATS=1 CWRAP_LOG_NUM=1 CWRAP_LOG_TIMESTAMP=1 CWRAP_LOG_FILE=1 CWRAP_LOG_CURT=0 CWRAP_LOG_LIMIT=1000000 time zeek hello.zeek
+Hello
+World!
+1.91user 1.03system 0:02.86elapsed 102%CPU (0avgtext+0avgdata 178244maxresident)k
+```
+
+Have we can see that each call to `foo()` takes about 0.0005 seconds or half a millisecond. Keep in mind that the debug Zeek runs about half the normal speed, and the cwrap compiled debug Zeek runs at least 20% slower than that. The idea is not to get hung up on the actual wallclock times, but to be able to compare the relative function times, e.g. if a C++ function uses 10% of the total time in `foo()` using cwrap instrumented Zeek, it will likely use a similar percentage of time in production compiled Zeek.
+
+Also, note that between each `foo()` call are 289 enter and exit lines suggesting that 289 / 2 = 144 C/C++ functions are called per loop in the above Zeek script. But note, some of the most common `std::` and other, etc, functions have been disabled via verbosity and therefore not counted in the 289.
+```
+$ cat cwrap.out | egrep "(zeek_init|foo)" | perl -lane 'if(m~\#(\d+) .* ([\d\.]+)s .* name=foo~){ ($n,$s)=($1,$2); if(defined $n_last){ printf qq[%u enter / exits took %f seconds; $_\n], $n - $n_last, $s - $s_last; } $n_last=$n; $s_last=$s; }'
+289 enter / exits took 0.000462 seconds; #1791557 C0 3.463344s                     - name=foo()
+289 enter / exits took 0.000475 seconds; #1791846 C0 3.463819s                     - name=foo()
+289 enter / exits took 0.000459 seconds; #1792135 C0 3.464278s                     - name=foo()
+289 enter / exits took 0.000476 seconds; #1792424 C0 3.464754s                     - name=foo()
+289 enter / exits took 0.000456 seconds; #1792713 C0 3.465210s                     - name=foo()
+289 enter / exits took 0.000471 seconds; #1793002 C0 3.465681s                     - name=foo()
+289 enter / exits took 0.000458 seconds; #1793291 C0 3.466139s                     - name=foo()
+289 enter / exits took 0.000479 seconds; #1793580 C0 3.466618s                     - name=foo()
+289 enter / exits took 0.000458 seconds; #1793869 C0 3.467076s                     - name=foo()
+289 enter / exits took 0.000454 seconds; #1794158 C0 3.467530s                     - name=foo()
+```
+
+The 144 functions called per Zeek script loop look like this:
+```
+$ egrep --max-count 1 --before-context=42 --after-context=247 foo cwrap.out
+#1791226 C0 3.462814s             + StmtList::Exec() { #4499               // <-- outer 1st foo() call start
+#1791227 C0 3.462815s               + Stmt::RegisterAccess() { #14198
+#1791228 C0 3.462816s                 } // Stmt::RegisterAccess()
+#1791229 C0 3.462819s               + Frame::SetNextStmt() { #9790
+#1791230 C0 3.462819s                 } // Frame::SetNextStmt()
+#1791231 C0 3.462822s               + pre_execute_stmt() { #9790
+#1791232 C0 3.462822s                 } // pre_execute_stmt()
+#1791233 C0 3.462825s               + ExprStmt::Exec() { #5101
+#1791234 C0 3.462825s                 + Stmt::RegisterAccess() { #14199
+#1791235 C0 3.462827s                   } // Stmt::RegisterAccess()
+#1791236 C0 3.462830s                 + CallExpr::Eval() { #560
+#1791237 C0 3.462830s                   + Expr::IsError() { #10605
+#1791238 C0 3.462832s                     + BroType::Tag() { #136043
+#1791239 C0 3.462833s                       } // BroType::Tag()
+#1791240 C0 3.462836s                     } // Expr::IsError()
+#1791241 C0 3.462837s                   + Frame::GetTrigger() { #878
+#1791242 C0 3.462838s                     } // Frame::GetTrigger()
+#1791243 C0 3.462841s                   + NameExpr::Eval() { #7898
+#1791244 C0 3.462841s                     + ID::AsType() { #7943
+#1791245 C0 3.462843s                       } // ID::AsType()
+#1791246 C0 3.462845s                     + ID::IsGlobal() { #8001
+#1791247 C0 3.462846s                       } // ID::IsGlobal()
+#1791248 C0 3.462848s                     + ID::ID_Val() { #4922
+#1791249 C0 3.462849s                       } // ID::ID_Val()
+#1791250 C0 3.462854s                     } // NameExpr::Eval()
+#1791251 C0 3.462856s                   + eval_list() { #564
+#1791252 C0 3.462857s                     + ListExpr::Exprs() { #564
+#1791253 C0 3.462858s                       } // ListExpr::Exprs()
+#1791254 C0 3.462861s                     + safe_malloc() { #4722
+#1791255 C0 3.462861s                       } // safe_malloc()
+#1791256 C0 3.462864s                     + ConstExpr::Eval() { #449
+#1791257 C0 3.462864s                       + ConstExpr::Value() { #449
+#1791258 C0 3.462866s                         } // ConstExpr::Value()
+#1791259 C0 3.462869s                       } // ConstExpr::Eval()
+#1791260 C0 3.462870s                     } // eval_list()
+#1791261 C0 3.462872s                   + BroType::Tag() { #136044
+#1791262 C0 3.462873s                     } // BroType::Tag()
+#1791263 C0 3.462875s                   + Frame::GetCall() { #1437
+#1791264 C0 3.462876s                     } // Frame::GetCall()
+#1791265 C0 3.462878s                   + Frame::SetCall() { #1437
+#1791266 C0 3.462879s                     } // Frame::SetCall()
+#1791267 C0 3.462881s                   + BroFunc::Call() { #320           // <-- inner 1st foo() call start
+#1791268 C0 3.462882s                     - name=foo()
+#1791269 C0 3.462885s                     + SegmentProfiler::SegmentProfiler() { #320
+#1791270 C0 3.462885s                       } // SegmentProfiler::SegmentProfiler()
+#1791271 C0 3.462888s                     + plugin::Manager::HavePluginForHook() { #562
+#1791272 C0 3.462889s                       } // plugin::Manager::HavePluginForHook()
+#1791273 C0 3.462891s                     + Func::Flavor() { #1032
+#1791274 C0 3.462892s                       + Func::FType() { #1802
+#1791275 C0 3.462893s                         + BroType::AsFuncType() { #2063
+#1791276 C0 3.462895s                           } // BroType::AsFuncType()
+#1791277 C0 3.462898s                         } // Func::FType()
+#1791278 C0 3.462899s                       + FuncType::Flavor() { #1141
+#1791279 C0 3.462900s                         } // FuncType::Flavor()
+#1791280 C0 3.462902s                       } // Func::Flavor()
+#1791281 C0 3.462904s                     + Func::HandlePluginResult() { #561
+#1791282 C0 3.462904s                       } // Func::HandlePluginResult()
+#1791283 C0 3.462907s                     + Frame::Frame() { #320
+#1791284 C0 3.462908s                       + BroObj::BroObj() { #26321
+#1791285 C0 3.462910s                         } // BroObj::BroObj()
+#1791286 C0 3.462913s                       } // Frame::Frame()
+#1791287 C0 3.462914s                     + Frame::GetTrigger() { #879
+#1791288 C0 3.462915s                       } // Frame::GetTrigger()
+#1791289 C0 3.462917s                     + Frame::SetTrigger() { #319
+#1791290 C0 3.462918s                       + Frame::ClearTrigger() { #319
+#1791291 C0 3.462920s                         } // Frame::ClearTrigger()
+#1791292 C0 3.462922s                       } // Frame::SetTrigger()
+#1791293 C0 3.462924s                     + Frame::GetCall() { #1438
+#1791294 C0 3.462924s                       } // Frame::GetCall()
+#1791295 C0 3.462927s                     + Frame::SetCall() { #1438
+#1791296 C0 3.462927s                       } // Frame::SetCall()
+#1791297 C0 3.462930s                     + Frame::GetCall() { #1439
+#1791298 C0 3.462931s                       } // Frame::GetCall()
+#1791299 C0 3.462934s                     + TraceState::DoTrace() { #1061
+#1791300 C0 3.462934s                       } // TraceState::DoTrace()
+#1791301 C0 3.462937s                     + Frame::NthElement() { #578
+#1791302 C0 3.462938s                       } // Frame::NthElement()
+#1791303 C0 3.462940s                     + Frame::SetElement() { #8717
+#1791304 C0 3.462940s                       } // Frame::SetElement()
+#1791305 C0 3.462943s                     + Frame::Reset() { #396
+#1791306 C0 3.462944s                       } // Frame::Reset()
+#1791307 C0 3.462946s                     + StmtList::Exec() { #4500
+#1791308 C0 3.462947s                       + Stmt::RegisterAccess() { #14200
+#1791309 C0 3.462950s                         } // Stmt::RegisterAccess()
+#1791310 C0 3.462953s                       + Frame::SetNextStmt() { #9791
+#1791311 C0 3.462953s                         } // Frame::SetNextStmt()
+#1791312 C0 3.462956s                       + pre_execute_stmt() { #9791
+#1791313 C0 3.462956s                         } // pre_execute_stmt()
+#1791314 C0 3.462959s                       + ReturnStmt::Exec() { #260
+#1791315 C0 3.462960s                         + Stmt::RegisterAccess() { #14201
+#1791316 C0 3.462961s                           } // Stmt::RegisterAccess()
+#1791317 C0 3.462964s                         + NameExpr::Eval() { #7899
+#1791318 C0 3.462965s                           + ID::AsType() { #7944
+#1791319 C0 3.462967s                             } // ID::AsType()
+#1791320 C0 3.462970s                           + ID::IsGlobal() { #8002
+#1791321 C0 3.462970s                             } // ID::IsGlobal()
+#1791322 C0 3.462973s                           + Frame::GetElement() { #5880
+#1791323 C0 3.462973s                             + ID::Offset() { #14019
+#1791324 C0 3.462975s                               } // ID::Offset()
+#1791325 C0 3.462977s                             } // Frame::GetElement()
+#1791326 C0 3.462979s                           } // NameExpr::Eval()
+#1791327 C0 3.462980s                         } // ReturnStmt::Exec()
+#1791328 C0 3.462982s                       + post_execute_stmt() { #9789
+#1791329 C0 3.462982s                         + Frame::BreakBeforeNextStmt() { #293
+#1791330 C0 3.462984s                           } // Frame::BreakBeforeNextStmt()
+#1791331 C0 3.462987s                         + Frame::BreakOnReturn() { #293
+#1791332 C0 3.462987s                           } // Frame::BreakOnReturn()
+#1791333 C0 3.462990s                         } // post_execute_stmt()
+#1791334 C0 3.462991s                       } // StmtList::Exec()
+#1791335 C0 3.462993s                     + Frame::HasDelayed() { #1624
+#1791336 C0 3.462993s                       } // Frame::HasDelayed()
+#1791337 C0 3.462996s                     + Func::Flavor() { #1033
+#1791338 C0 3.462996s                       + Func::FType() { #1803
+#1791339 C0 3.462998s                         + BroType::AsFuncType() { #2064
+#1791340 C0 3.463000s                           } // BroType::AsFuncType()
+#1791341 C0 3.463002s                         } // Func::FType()
+#1791342 C0 3.463004s                       + FuncType::Flavor() { #1142
+#1791343 C0 3.463004s                         } // FuncType::Flavor()
+#1791344 C0 3.463006s                       } // Func::Flavor()
+#1791345 C0 3.463008s                     + Func::Flavor() { #1034
+#1791346 C0 3.463009s                       + Func::FType() { #1804
+#1791347 C0 3.463010s                         + BroType::AsFuncType() { #2065
+#1791348 C0 3.463012s                           } // BroType::AsFuncType()
+#1791349 C0 3.463014s                         } // Func::FType()
+#1791350 C0 3.463016s                       + FuncType::Flavor() { #1143
+#1791351 C0 3.463016s                         } // FuncType::Flavor()
+#1791352 C0 3.463019s                       } // Func::Flavor()
+#1791353 C0 3.463020s                     + Func::FType() { #1805
+#1791354 C0 3.463021s                       + BroType::AsFuncType() { #2066
+#1791355 C0 3.463022s                         } // BroType::AsFuncType()
+#1791356 C0 3.463025s                       } // Func::FType()
+#1791357 C0 3.463027s                     + FuncType::YieldType() { #801
+#1791358 C0 3.463027s                       } // FuncType::YieldType()
+#1791359 C0 3.463030s                     + Func::FType() { #1806
+#1791360 C0 3.463030s                       + BroType::AsFuncType() { #2067
+#1791361 C0 3.463032s                         } // BroType::AsFuncType()
+#1791362 C0 3.463034s                       } // Func::FType()
+#1791363 C0 3.463036s                     + FuncType::YieldType() { #802
+#1791364 C0 3.463036s                       } // FuncType::YieldType()
+#1791365 C0 3.463041s                     + BroType::Tag() { #136045
+#1791366 C0 3.463042s                       } // BroType::Tag()
+#1791367 C0 3.463044s                     + TraceState::DoTrace() { #1062
+#1791368 C0 3.463045s                       } // TraceState::DoTrace()
+#1791369 C0 3.463048s                     + Frame::Release() { #319
+#1791370 C0 3.463048s                       } // Frame::Release()
+#1791371 C0 3.463052s                     } // BroFunc::Call()             // <-- inner 1st foo() call end
+#1791372 C0 3.463054s                   + Frame::SetCall() { #1439
+#1791373 C0 3.463054s                     } // Frame::SetCall()
+#1791374 C0 3.463057s                   } // CallExpr::Eval()
+#1791375 C0 3.463058s                 + ExprStmt::DoExec() { #607
+#1791376 C0 3.463059s                   } // ExprStmt::DoExec()
+#1791377 C0 3.463061s                 } // ExprStmt::Exec()
+#1791378 C0 3.463063s               + post_execute_stmt() { #9790
+#1791379 C0 3.463063s                 } // post_execute_stmt()
+#1791380 C0 3.463066s               + Frame::HasDelayed() { #1625
+#1791381 C0 3.463067s                 } // Frame::HasDelayed()
+#1791382 C0 3.463069s               + Frame::SetNextStmt() { #9792
+#1791383 C0 3.463069s                 } // Frame::SetNextStmt()
+#1791384 C0 3.463072s               + pre_execute_stmt() { #9792
+#1791385 C0 3.463072s                 } // pre_execute_stmt()
+#1791386 C0 3.463075s               + ExprStmt::Exec() { #5102
+#1791387 C0 3.463076s                 + Stmt::RegisterAccess() { #14202
+#1791388 C0 3.463077s                   } // Stmt::RegisterAccess()
+#1791389 C0 3.463080s                 + IncrExpr::Eval() { #1
+#1791390 C0 3.463081s                   + UnaryExpr::Eval() { #9100
+#1791391 C0 3.463082s                     + Expr::IsError() { #10606
+#1791392 C0 3.463084s                       + BroType::Tag() { #136046
+#1791393 C0 3.463085s                         } // BroType::Tag()
+#1791394 C0 3.463088s                       } // Expr::IsError()
+#1791395 C0 3.463089s                     + NameExpr::Eval() { #7900
+#1791396 C0 3.463090s                       + ID::AsType() { #7945
+#1791397 C0 3.463092s                         } // ID::AsType()
+#1791398 C0 3.463094s                       + ID::IsGlobal() { #8003
+#1791399 C0 3.463095s                         } // ID::IsGlobal()
+#1791400 C0 3.463097s                       + Frame::GetElement() { #5881
+#1791401 C0 3.463097s                         + ID::Offset() { #14020
+#1791402 C0 3.463099s                           } // ID::Offset()
+#1791403 C0 3.463102s                         } // Frame::GetElement()
+#1791404 C0 3.463103s                       } // NameExpr::Eval()
+#1791405 C0 3.463105s                     + is_vector() { #9672
+#1791406 C0 3.463105s                       + BroType::Tag() { #136047
+#1791407 C0 3.463107s                         } // BroType::Tag()
+#1791408 C0 3.463109s                       } // is_vector()
+#1791409 C0 3.463111s                     + UnaryExpr::Fold() { #189
+#1791410 C0 3.463111s                       } // UnaryExpr::Fold()
+#1791411 C0 3.463114s                     } // UnaryExpr::Eval()
+#1791412 C0 3.463116s                   + is_vector() { #9673
+#1791413 C0 3.463116s                     + BroType::Tag() { #136048
+#1791414 C0 3.463118s                       } // BroType::Tag()
+#1791415 C0 3.463120s                     } // is_vector()
+#1791416 C0 3.463122s                   + IncrExpr::DoSingleEval() { #1
+#1791417 C0 3.463122s                     + BroType::InternalType() { #39589
+#1791418 C0 3.463124s                       } // BroType::InternalType()
+#1791419 C0 3.463127s                     + BroType::InternalType() { #39590
+#1791420 C0 3.463127s                       } // BroType::InternalType()
+#1791421 C0 3.463130s                     + Expr::Tag() { #5
+#1791422 C0 3.463130s                       } // Expr::Tag()
+#1791423 C0 3.463132s                     + Expr::Type() { #1832
+#1791424 C0 3.463133s                       } // Expr::Type()
+#1791425 C0 3.463136s                     + BroType::Tag() { #136049
+#1791426 C0 3.463136s                       } // BroType::Tag()
+#1791427 C0 3.463141s                     + IsVector() { #150
+#1791428 C0 3.463141s                       } // IsVector()
+#1791429 C0 3.463144s                     + BroType::Tag() { #136050
+#1791430 C0 3.463144s                       } // BroType::Tag()
+#1791431 C0 3.463146s                     + ValManager::GetCount() { #5
+#1791432 C0 3.463147s                       } // ValManager::GetCount()
+#1791433 C0 3.463150s                     } // IncrExpr::DoSingleEval()
+#1791434 C0 3.463151s                   + NameExpr::Assign() { #144
+#1791435 C0 3.463152s                     + ID::IsGlobal() { #8004
+#1791436 C0 3.463153s                       } // ID::IsGlobal()
+#1791437 C0 3.463156s                     + Frame::SetElement() { #8140
+#1791438 C0 3.463156s                       + ID::Offset() { #14021
+#1791439 C0 3.463158s                         } // ID::Offset()
+#1791440 C0 3.463160s                       + Frame::SetElement() { #8718
+#1791441 C0 3.463161s                         } // Frame::SetElement()
+#1791442 C0 3.463164s                       } // Frame::SetElement()
+#1791443 C0 3.463165s                     } // NameExpr::Assign()
+#1791444 C0 3.463167s                   } // IncrExpr::Eval()
+#1791445 C0 3.463169s                 + ExprStmt::DoExec() { #608
+#1791446 C0 3.463169s                   } // ExprStmt::DoExec()
+#1791447 C0 3.463171s                 } // ExprStmt::Exec()
+#1791448 C0 3.463173s               + post_execute_stmt() { #9791
+#1791449 C0 3.463174s                 } // post_execute_stmt()
+#1791450 C0 3.463176s               + Frame::HasDelayed() { #1626
+#1791451 C0 3.463177s                 } // Frame::HasDelayed()
+#1791452 C0 3.463179s               } // StmtList::Exec()                  // <-- outer 1st foo() call end
+#1791453 C0 3.463181s             + BinaryExpr::Eval() { #148              // <-- ++x eval start
+#1791454 C0 3.463182s               + Expr::IsError() { #10607
+#1791455 C0 3.463183s                 + BroType::Tag() { #136051
+#1791456 C0 3.463185s                   } // BroType::Tag()
+#1791457 C0 3.463187s                 } // Expr::IsError()
+#1791458 C0 3.463189s               + NameExpr::Eval() { #7901
+#1791459 C0 3.463189s                 + ID::AsType() { #7946
+#1791460 C0 3.463191s                   } // ID::AsType()
+#1791461 C0 3.463193s                 + ID::IsGlobal() { #8005
+#1791462 C0 3.463194s                   } // ID::IsGlobal()
+#1791463 C0 3.463196s                 + Frame::GetElement() { #5882
+#1791464 C0 3.463197s                   + ID::Offset() { #14022
+#1791465 C0 3.463198s                     } // ID::Offset()
+#1791466 C0 3.463201s                   } // Frame::GetElement()
+#1791467 C0 3.463202s                 } // NameExpr::Eval()
+#1791468 C0 3.463204s               + ConstExpr::Eval() { #450
+#1791469 C0 3.463205s                 + ConstExpr::Value() { #450
+#1791470 C0 3.463206s                   } // ConstExpr::Value()
+#1791471 C0 3.463208s                 } // ConstExpr::Eval()
+#1791472 C0 3.463210s               + is_vector() { #9674
+#1791473 C0 3.463211s                 + BroType::Tag() { #136052
+#1791474 C0 3.463212s                   } // BroType::Tag()
+#1791475 C0 3.463215s                 } // is_vector()
+#1791476 C0 3.463216s               + is_vector() { #9675
+#1791477 C0 3.463217s                 + BroType::Tag() { #136053
+#1791478 C0 3.463218s                   } // BroType::Tag()
+#1791479 C0 3.463221s                 } // is_vector()
+#1791480 C0 3.463222s               + Expr::Type() { #1833
+#1791481 C0 3.463223s                 } // Expr::Type()
+#1791482 C0 3.463225s               + BroType::Tag() { #136054
+#1791483 C0 3.463226s                 } // BroType::Tag()
+#1791484 C0 3.463228s               + IsVector() { #151
+#1791485 C0 3.463229s                 } // IsVector()
+#1791486 C0 3.463231s               + BinaryExpr::Fold() { #9
+#1791487 C0 3.463232s                 + BroType::InternalType() { #39591
+#1791488 C0 3.463233s                   } // BroType::InternalType()
+#1791489 C0 3.463236s                 + BroType::Tag() { #136055
+#1791490 C0 3.463236s                   } // BroType::Tag()
+#1791491 C0 3.463241s                 + BroType::IsSet() { #4378
+#1791492 C0 3.463242s                   } // BroType::IsSet()
+#1791493 C0 3.463244s                 + BroType::InternalType() { #39592
+#1791494 C0 3.463245s                   } // BroType::InternalType()
+#1791495 C0 3.463247s                 + BroType::InternalType() { #39593
+#1791496 C0 3.463248s                   } // BroType::InternalType()
+#1791497 C0 3.463250s                 + BroType::Tag() { #136056
+#1791498 C0 3.463251s                   } // BroType::Tag()
+#1791499 C0 3.463253s                 + IsVector() { #152
+#1791500 C0 3.463254s                   } // IsVector()
+#1791501 C0 3.463256s                 + BroType::Tag() { #136057
+#1791502 C0 3.463257s                   } // BroType::Tag()
+#1791503 C0 3.463259s                 + BroType::InternalType() { #39594
+#1791504 C0 3.463260s                   } // BroType::InternalType()
+#1791505 C0 3.463262s                 + BroType::InternalType() { #39595
+#1791506 C0 3.463263s                   } // BroType::InternalType()
+#1791507 C0 3.463265s                 + BroType::Tag() { #136058
+#1791508 C0 3.463266s                   } // BroType::Tag()
+#1791509 C0 3.463268s                 + ValManager::GetBool() { #24561
+#1791510 C0 3.463269s                   } // ValManager::GetBool()
+#1791511 C0 3.463271s                 } // BinaryExpr::Fold()
+#1791512 C0 3.463273s               } // BinaryExpr::Eval()                // <-- ++x eval end
+#1791513 C0 3.463274s             + BroType::Tag() { #136059
+#1791514 C0 3.463275s               } // BroType::Tag()
+#1791515 C0 3.463278s             + StmtList::Exec() { #4501               // <-- outer 2nd foo() call end
+```
+
+Here's a quick and dirty Perl script to analyze the above snippet:
+```
+$ cat cwrap-prof.pl
+use strict;
+
+my $h;
+my $acc;
+my $totals;
+my $indent = -1;
+while (<stdin>) {
+    chomp;
+    #debug printf qq[%s\n], $_;
+    if (m~ ([\d\.]+)s .* \+ (.*?)\(\) \{~) {
+	my ($t, $f) = ($1, $2);
+	#debug printf qq[- %f %s\n], $t, $f;
+	die if (exists $h->{$f});
+	$indent ++;
+	$h->{$indent}{$f} = $t;
+    }
+    elsif (m~ ([\d\.]+)s .* \} // (.*?)\(\)~) {
+	my ($t, $f) = ($1, $2);
+	die if (not exists $h->{$indent}{$f});
+	my $t_elapsed = $t - $h->{$indent}{$f};
+	printf qq[- tree, sub calls: incl., excl.; %fs, %fs, %fs: %s+ %s()\n], $t_elapsed, $acc->{$indent}, $t_elapsed - $acc->{$indent}, '  ' x $indent, $f;
+	$totals->{$f}{calls} ++;
+	$totals->{$f}{time_excl_sub_calls} += $t_elapsed - $acc->{$indent};
+	delete $acc->{$indent};
+	delete $h->{$indent}{$f};
+	$indent --;
+	$acc->{$indent} += $t_elapsed;
+    }
+}
+my $grand_total_time;
+my $grand_total_calls;
+my $sorted_totals;
+foreach my $f (keys %{ $totals }) {
+    $grand_total_time += $totals->{$f}{time_excl_sub_calls};
+    $grand_total_calls += $totals->{$f}{calls};
+    my $time_calls_func = sprintf qq[%fs for %3u calls (excl. sub calls) to %s()], $totals->{$f}{time_excl_sub_calls}, $totals->{$f}{calls}, $f;
+    $sorted_totals->{$time_calls_func} ++;
+}
+foreach my $time_calls_func (sort keys %{ $sorted_totals }) {
+    my ($time_excl_sub_calls) = $time_calls_func =~ m~^([\d\.]+)s~;
+    printf qq[- %5.1f%%: %s\n], $time_excl_sub_calls / $grand_total_time * 100, $time_calls_func;
+}
+printf qq[- 100.0%: %fs for %3u calls (excl. sub calls) to *() AKA grand total\n], $grand_total_time, $grand_total_calls;
+```
+
+Running the Perl script results in the following output:
+
+Note: The output is a little confusing because the time each function took is only shown when the function ends, to save lines.
+
+Note: Elapsed timing in seconds is calculated in three different ways:
+
+The 1st column shows the wallclock elapsed time including the function call, and including the time for any sub calls made.
+
+The 2nd column shows the wallclock elapsed time excluding the function call, but including the time for any sub calls made.
+
+The 3rd column shows the wallclock elapsed time including the function call, but excluding the time for any sub calls made.
+```
+$ egrep --max-count 1 --before-context=42 --after-context=247 foo cwrap.out | perl cwrap-prof.pl
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:   + Stmt::RegisterAccess()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:   + Frame::SetNextStmt()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:   + pre_execute_stmt()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:     + Stmt::RegisterAccess()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000006s, 0.000001s, 0.000005s:       + Expr::IsError()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:       + Frame::GetTrigger()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:         + ID::AsType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + ID::IsGlobal()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + ID::ID_Val()
+- tree, sub calls: incl., excl.; 0.000013s, 0.000004s, 0.000009s:       + NameExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + ListExpr::Exprs()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + safe_malloc()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:           + ConstExpr::Value()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000002s, 0.000003s:         + ConstExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000014s, 0.000006s, 0.000008s:       + eval_list()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:       + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:       + Frame::GetCall()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:       + Frame::SetCall()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + SegmentProfiler::SegmentProfiler()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + plugin::Manager::HavePluginForHook()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:             + BroType::AsFuncType()
+- tree, sub calls: incl., excl.; 0.000006s, 0.000002s, 0.000004s:           + Func::FType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:           + FuncType::Flavor()
+- tree, sub calls: incl., excl.; 0.000011s, 0.000007s, 0.000004s:         + Func::Flavor()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + Func::HandlePluginResult()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:           + BroObj::BroObj()
+- tree, sub calls: incl., excl.; 0.000006s, 0.000002s, 0.000004s:         + Frame::Frame()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + Frame::GetTrigger()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:           + Frame::ClearTrigger()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000002s, 0.000003s:         + Frame::SetTrigger()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + Frame::GetCall()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + Frame::SetCall()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + Frame::GetCall()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + TraceState::DoTrace()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + Frame::NthElement()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + Frame::SetElement()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + Frame::Reset()
+- tree, sub calls: incl., excl.; 0.000003s, 0.000000s, 0.000003s:           + Stmt::RegisterAccess()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:           + Frame::SetNextStmt()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:           + pre_execute_stmt()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:             + Stmt::RegisterAccess()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:               + ID::AsType()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:               + ID::IsGlobal()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:                 + ID::Offset()
+- tree, sub calls: incl., excl.; 0.000004s, 0.000002s, 0.000002s:               + Frame::GetElement()
+- tree, sub calls: incl., excl.; 0.000015s, 0.000006s, 0.000009s:             + NameExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000021s, 0.000016s, 0.000005s:           + ReturnStmt::Exec()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:             + Frame::BreakBeforeNextStmt()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:             + Frame::BreakOnReturn()
+- tree, sub calls: incl., excl.; 0.000008s, 0.000002s, 0.000006s:           + post_execute_stmt()
+- tree, sub calls: incl., excl.; 0.000045s, 0.000032s, 0.000013s:         + StmtList::Exec()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + Frame::HasDelayed()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:             + BroType::AsFuncType()
+- tree, sub calls: incl., excl.; 0.000006s, 0.000002s, 0.000004s:           + Func::FType()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:           + FuncType::Flavor()
+- tree, sub calls: incl., excl.; 0.000010s, 0.000006s, 0.000004s:         + Func::Flavor()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:             + BroType::AsFuncType()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000002s, 0.000003s:           + Func::FType()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:           + FuncType::Flavor()
+- tree, sub calls: incl., excl.; 0.000011s, 0.000005s, 0.000006s:         + Func::Flavor()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:           + BroType::AsFuncType()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000001s, 0.000004s:         + Func::FType()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + FuncType::YieldType()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:           + BroType::AsFuncType()
+- tree, sub calls: incl., excl.; 0.000004s, 0.000002s, 0.000002s:         + Func::FType()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + FuncType::YieldType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + TraceState::DoTrace()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + Frame::Release()
+- tree, sub calls: incl., excl.; 0.000171s, 0.000104s, 0.000067s:       + BroFunc::Call()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:       + Frame::SetCall()
+- tree, sub calls: incl., excl.; 0.000227s, 0.000208s, 0.000019s:     + CallExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + ExprStmt::DoExec()
+- tree, sub calls: incl., excl.; 0.000236s, 0.000230s, 0.000006s:   + ExprStmt::Exec()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:   + post_execute_stmt()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:   + Frame::HasDelayed()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:   + Frame::SetNextStmt()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:   + pre_execute_stmt()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + Stmt::RegisterAccess()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:           + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000006s, 0.000001s, 0.000005s:         + Expr::IsError()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:           + ID::AsType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:           + ID::IsGlobal()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:             + ID::Offset()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000002s, 0.000003s:           + Frame::GetElement()
+- tree, sub calls: incl., excl.; 0.000014s, 0.000008s, 0.000006s:         + NameExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:           + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000004s, 0.000002s, 0.000002s:         + is_vector()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + UnaryExpr::Fold()
+- tree, sub calls: incl., excl.; 0.000033s, 0.000024s, 0.000009s:       + UnaryExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:         + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000004s, 0.000002s, 0.000002s:       + is_vector()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:         + BroType::InternalType()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + BroType::InternalType()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + Expr::Tag()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + Expr::Type()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + IsVector()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:         + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + ValManager::GetCount()
+- tree, sub calls: incl., excl.; 0.000028s, 0.000004s, 0.000024s:       + IncrExpr::DoSingleEval()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + ID::IsGlobal()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:           + ID::Offset()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:           + Frame::SetElement()
+- tree, sub calls: incl., excl.; 0.000008s, 0.000003s, 0.000005s:         + Frame::SetElement()
+- tree, sub calls: incl., excl.; 0.000014s, 0.000009s, 0.000005s:       + NameExpr::Assign()
+- tree, sub calls: incl., excl.; 0.000087s, 0.000079s, 0.000008s:     + IncrExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:     + ExprStmt::DoExec()
+- tree, sub calls: incl., excl.; 0.000096s, 0.000088s, 0.000008s:   + ExprStmt::Exec()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:   + post_execute_stmt()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:   + Frame::HasDelayed()
+- tree, sub calls: incl., excl.; 0.000365s, 0.000336s, 0.000029s: + StmtList::Exec()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:     + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000002s, 0.000003s:   + Expr::IsError()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:     + ID::AsType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + ID::IsGlobal()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:       + ID::Offset()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000001s, 0.000004s:     + Frame::GetElement()
+- tree, sub calls: incl., excl.; 0.000013s, 0.000008s, 0.000005s:   + NameExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + ConstExpr::Value()
+- tree, sub calls: incl., excl.; 0.000004s, 0.000001s, 0.000003s:   + ConstExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000001s, 0.000004s:   + is_vector()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000001s, 0.000004s:   + is_vector()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:   + Expr::Type()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:   + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:   + IsVector()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::InternalType()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:     + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::IsSet()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::InternalType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::InternalType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + IsVector()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::InternalType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::InternalType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + BroType::Tag()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + ValManager::GetBool()
+- tree, sub calls: incl., excl.; 0.000040s, 0.000011s, 0.000029s:   + BinaryExpr::Fold()
+- tree, sub calls: incl., excl.; 0.000092s, 0.000075s, 0.000017s: + BinaryExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s: + BroType::Tag()
+-   0.0%: 0.000000s for   1 calls (excl. sub calls) to Expr::Tag()
+-   0.0%: 0.000000s for   1 calls (excl. sub calls) to Frame::BreakOnReturn()
+-   0.0%: 0.000000s for   1 calls (excl. sub calls) to Frame::Release()
+-   0.0%: 0.000000s for   1 calls (excl. sub calls) to Func::HandlePluginResult()
+-   0.0%: 0.000000s for   1 calls (excl. sub calls) to SegmentProfiler::SegmentProfiler()
+-   0.0%: 0.000000s for   1 calls (excl. sub calls) to UnaryExpr::Fold()
+-   0.0%: 0.000000s for   1 calls (excl. sub calls) to safe_malloc()
+-   0.0%: 0.000000s for   2 calls (excl. sub calls) to FuncType::YieldType()
+-   0.0%: 0.000000s for   3 calls (excl. sub calls) to Frame::SetNextStmt()
+-   0.0%: 0.000000s for   3 calls (excl. sub calls) to pre_execute_stmt()
+-   0.2%: 0.000001s for   1 calls (excl. sub calls) to BroType::IsSet()
+-   0.2%: 0.000001s for   1 calls (excl. sub calls) to Frame::NthElement()
+-   0.2%: 0.000001s for   1 calls (excl. sub calls) to Frame::Reset()
+-   0.2%: 0.000001s for   1 calls (excl. sub calls) to ID::ID_Val()
+-   0.2%: 0.000001s for   1 calls (excl. sub calls) to ListExpr::Exprs()
+-   0.2%: 0.000001s for   1 calls (excl. sub calls) to ValManager::GetBool()
+-   0.2%: 0.000001s for   1 calls (excl. sub calls) to ValManager::GetCount()
+-   0.2%: 0.000001s for   1 calls (excl. sub calls) to plugin::Manager::HavePluginForHook()
+-   0.2%: 0.000001s for   2 calls (excl. sub calls) to ExprStmt::DoExec()
+-   0.2%: 0.000001s for   2 calls (excl. sub calls) to TraceState::DoTrace()
+-   0.2%: 0.000001s for   3 calls (excl. sub calls) to Frame::SetCall()
+-   0.2%: 0.000001s for   3 calls (excl. sub calls) to FuncType::Flavor()
+-   0.4%: 0.000002s for   1 calls (excl. sub calls) to BroObj::BroObj()
+-   0.4%: 0.000002s for   1 calls (excl. sub calls) to Frame::BreakBeforeNextStmt()
+-   0.4%: 0.000002s for   1 calls (excl. sub calls) to Frame::ClearTrigger()
+-   0.4%: 0.000002s for   2 calls (excl. sub calls) to Expr::Type()
+-   0.4%: 0.000002s for   2 calls (excl. sub calls) to Frame::GetTrigger()
+-   0.4%: 0.000002s for   3 calls (excl. sub calls) to Frame::GetCall()
+-   0.4%: 0.000002s for   3 calls (excl. sub calls) to Frame::HasDelayed()
+-   0.4%: 0.000002s for   3 calls (excl. sub calls) to IsVector()
+-   0.7%: 0.000003s for   1 calls (excl. sub calls) to Frame::SetTrigger()
+-   0.7%: 0.000003s for   2 calls (excl. sub calls) to ConstExpr::Value()
+-   0.9%: 0.000004s for   1 calls (excl. sub calls) to Frame::Frame()
+-   0.9%: 0.000004s for   5 calls (excl. sub calls) to ID::IsGlobal()
+-   1.1%: 0.000005s for   1 calls (excl. sub calls) to NameExpr::Assign()
+-   1.1%: 0.000005s for   1 calls (excl. sub calls) to ReturnStmt::Exec()
+-   1.3%: 0.000006s for   2 calls (excl. sub calls) to ConstExpr::Eval()
+-   1.3%: 0.000006s for   3 calls (excl. sub calls) to Frame::SetElement()
+-   1.5%: 0.000007s for   3 calls (excl. sub calls) to post_execute_stmt()
+-   1.5%: 0.000007s for   4 calls (excl. sub calls) to ID::Offset()
+-   1.5%: 0.000007s for   7 calls (excl. sub calls) to BroType::InternalType()
+-   1.7%: 0.000008s for   1 calls (excl. sub calls) to IncrExpr::Eval()
+-   1.7%: 0.000008s for   1 calls (excl. sub calls) to eval_list()
+-   1.7%: 0.000008s for   4 calls (excl. sub calls) to ID::AsType()
+-   1.7%: 0.000008s for   5 calls (excl. sub calls) to Stmt::RegisterAccess()
+-   2.0%: 0.000009s for   1 calls (excl. sub calls) to UnaryExpr::Eval()
+-   2.0%: 0.000009s for   3 calls (excl. sub calls) to Frame::GetElement()
+-   2.0%: 0.000009s for   5 calls (excl. sub calls) to BroType::AsFuncType()
+-   2.6%: 0.000012s for   4 calls (excl. sub calls) to is_vector()
+-   2.8%: 0.000013s for   3 calls (excl. sub calls) to Expr::IsError()
+-   3.1%: 0.000014s for   2 calls (excl. sub calls) to ExprStmt::Exec()
+-   3.1%: 0.000014s for   3 calls (excl. sub calls) to Func::Flavor()
+-   3.7%: 0.000017s for   1 calls (excl. sub calls) to BinaryExpr::Eval()
+-   3.7%: 0.000017s for   5 calls (excl. sub calls) to Func::FType()
+-   3.7%: 0.000017s for  17 calls (excl. sub calls) to BroType::Tag()
+-   4.1%: 0.000019s for   1 calls (excl. sub calls) to CallExpr::Eval()
+-   5.2%: 0.000024s for   1 calls (excl. sub calls) to IncrExpr::DoSingleEval()
+-   6.3%: 0.000029s for   1 calls (excl. sub calls) to BinaryExpr::Fold()
+-   6.3%: 0.000029s for   4 calls (excl. sub calls) to NameExpr::Eval()
+-   9.2%: 0.000042s for   2 calls (excl. sub calls) to StmtList::Exec()
+-  14.6%: 0.000067s for   1 calls (excl. sub calls) to BroFunc::Call()
+- 100.0%: 0.000458s for 144 calls (excl. sub calls) to *() AKA grand total
+```
+
+The bottom part of the output shows column 3 as a percentage of the Zeek script loop CPU time spent,
+e.g. `NameExpr::Eval()` is called 4 times, and the total wallclock time for all calls added together excluding sub calls is 0.000029 seconds, or 6.3% of the total 0.000458 seconds for one Zeek script loop.
+
+Interestingly we can see that the two top functions by percentage -- `BroFunc::Call()` [1] and `StmtList::Exec()` [2] -- only account for 3 of the 144 functions calls but account for about 25% of CPU usage excluding sub calls.
+And the six top functions by percentage only account for 10 of the 144 function calls but account for about 46% of the CPU usage excluding sub calls.
+
+The top functions look [1] [2] relatively innocent, so perhaps it's some kind of CPU background plumbing chewing the CPU? More investigation needed...
+
+[1] https://github.com/zeek/zeek/blob/v3.1.2/src/Func.cc#L307
+[2] https://github.com/zeek/zeek/blob/v3.1.2/src/Stmt.cc#L1517
+
+And here are the 4 calls to `NameExpr::Eval()` which add up to 0.000029 seconds with the sub calls ignored:
+```
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:         + ID::AsType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + ID::IsGlobal()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:         + ID::ID_Val()
+- tree, sub calls: incl., excl.; 0.000013s, 0.000004s, 0.000009s:       + NameExpr::Eval()
+
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:               + ID::AsType()
+- tree, sub calls: incl., excl.; 0.000000s, 0.000000s, 0.000000s:               + ID::IsGlobal()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:                 + ID::Offset()
+- tree, sub calls: incl., excl.; 0.000004s, 0.000002s, 0.000002s:               + Frame::GetElement()
+- tree, sub calls: incl., excl.; 0.000015s, 0.000006s, 0.000009s:             + NameExpr::Eval()
+
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:           + ID::AsType()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:           + ID::IsGlobal()
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:             + ID::Offset()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000002s, 0.000003s:           + Frame::GetElement()
+- tree, sub calls: incl., excl.; 0.000014s, 0.000008s, 0.000006s:         + NameExpr::Eval()
+
+- tree, sub calls: incl., excl.; 0.000002s, 0.000000s, 0.000002s:     + ID::AsType()        // <-- called 1st by NameExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:     + ID::IsGlobal()      // <-- called 2nd by NameExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000001s, 0.000000s, 0.000001s:       + ID::Offset()      // <-- called     by Frame::GetElement()
+- tree, sub calls: incl., excl.; 0.000005s, 0.000001s, 0.000004s:     + Frame::GetElement() // <-- called 3rd by NameExpr::Eval()
+- tree, sub calls: incl., excl.; 0.000013s, 0.000008s, 0.000005s:   + NameExpr::Eval()
+```
